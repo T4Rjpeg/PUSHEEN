@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#c4e5f5">
+<title>Pusheen</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mali:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&text=%20%21%22%27%28%29%2C-.0123456789%3A%3B%3F%40ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz~%C2%B0%E2%80%A6%E2%99%AA%E2%99%AB%E2%9C%A6%E3%81%85%E3%81%86%E3%81%88%E3%81%8F%E3%81%90%E3%81%99%E3%81%9A%E3%81%A0%E3%81%A3%E3%81%A4%E3%81%AB%E3%81%AF%E3%81%B2%E3%81%B4%E3%81%B5%E3%81%B7%E3%81%B8%E3%81%BD%E3%82%82%E3%82%83%E3%82%84%E3%82%88%E3%82%8B%E3%82%93%E3%83%83%E3%83%A0%E3%83%BC&display=swap">
+<style>
+  /* Pusheen's doodled garden. Canvas fills the screen (sky follows the real clock and season).
+     The interface is drawn like a comic: cream paper, warm brown ink outlines, pastel fills, a hand-lettered font.
+     Top-left: clock + points. Top-right: buttons (house, log, missions, shop, menu) and her mood + feeling.
+     Her words appear above her head, typed out live with her voice. Chat input sits bottom-left.
+     The look stays the same in light and dark mode: the scene carries day and night itself. */
+  :root {
+    --paper: #fffaf0;
+    --paper-2: #fff2e0;
+    --ink: #5b4944;
+    --ink-soft: #8b7a73;
+    --pink: #f8c4d3;
+    --pink-deep: #ea8fab;
+    --mint: #c3e8d1;
+    --butter: #ffe6a1;
+    --lav: #dcd2f4;
+    --sky: #c4e5f5;
+    --coral: #f8b8a6;
+    --grey: #e3ddd8;
+    --shadow: 0 3px 0 var(--ink);
+    --wob: 18px 22px 16px 24px / 22px 16px 24px 18px;
+    --f: 'Mali', 'M PLUS Rounded 1c', 'Comic Sans MS', system-ui, sans-serif;
+    --f-jp: 'Mochiy Pop One', 'Mali', sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --paper: #fffaf0; } }
+  :root[data-theme="dark"] { --paper: #fffaf0; }
+  [hidden] { display: none !important; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: #c4e5f5; color: var(--ink); overflow: hidden; overscroll-behavior: none; }
+  body { font-family: var(--f); font-weight: 600; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 3px dashed var(--pink-deep); outline-offset: 3px; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  #stage.grabbing { cursor: grabbing; }
+  .doodle { background: var(--paper); border: 2.5px solid var(--ink); box-shadow: var(--shadow); }
+  .press { transition: transform .08s ease, box-shadow .08s ease; }
+  .press:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+
+  /* ---- top bar ---- */
+  .top { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 10px); left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px));
+         display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; pointer-events: none; z-index: 5; }
+  .top > * { pointer-events: auto; }
+  .left, .right { display: flex; flex-direction: column; gap: 7px; }
+  .left { align-items: flex-start; }
+  .right { align-items: flex-end; }
+  .row { display: flex; gap: 6px; align-items: center; }
+  .chip { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 8px; border-radius: 999px; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; pointer-events: none !important; }
+  .chip svg { width: 20px; height: 20px; display: block; }
+  .chip .when { font-weight: 600; font-size: 11.5px; color: var(--ink-soft); }
+  .pill { height: 32px; padding: 0 12px 0 9px; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; background: var(--butter); }
+  .pill .star { font-size: 15px; }
+  .pill.pop { animation: pop .5s ease; }
+  @keyframes pop { 40% { transform: scale(1.18) rotate(-4deg); } }
+  .icon { width: 36px; height: 36px; border-radius: 12px 14px 11px 13px; display: inline-grid; place-items: center; padding: 0; position: relative; }
+  .icon svg { width: 20px; height: 20px; }
+  .icon.on { background: var(--pink); }
+  .badge { position: absolute; top: -7px; right: -7px; min-width: 19px; height: 19px; border-radius: 999px; background: var(--pink-deep); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; padding: 0 4px; border: 2px solid var(--ink); }
+  .moodcard { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; padding: 6px 12px 7px 8px; border-radius: var(--wob); min-width: 150px; max-width: 210px; background: var(--mint); transition: background .6s ease; pointer-events: none !important; }
+  .moodcard svg { grid-row: span 2; width: 30px; height: 30px; }
+  .moodcard .m { font-size: 14.5px; font-weight: 700; line-height: 1.15; }
+  .moodcard .m small { font-size: 10.5px; font-weight: 600; color: var(--ink-soft); letter-spacing: .04em; margin-right: 3px; }
+  .moodcard .e { font-size: 12px; font-weight: 600; color: var(--ink-soft); line-height: 1.2; }
+  .moodcard[data-m=kind] { background: var(--pink); } .moodcard[data-m=delighted] { background: var(--butter); } .moodcard[data-m=grumpy] { background: var(--coral); }
+  .moodcard[data-m=sad] { background: var(--lav); } .moodcard[data-m=dismissive] { background: var(--grey); } .moodcard[data-m=calm] { background: var(--mint); }
+  .drop { position: fixed; z-index: 6; border-radius: 16px; padding: 6px; min-width: 190px; }
+  .drop button { display: flex; width: 100%; align-items: center; gap: 10px; padding: 9px 12px; border: 0; background: none; border-radius: 10px; text-align: left; font-weight: 700; font-size: 15px; }
+  .drop button:hover { background: var(--paper-2); }
+  .drop button span { width: 20px; text-align: center; }
+  .hint { position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 66px); left: 50%; transform: translateX(-50%); font-size: 12.5px; font-weight: 700; padding: 4px 12px; border-radius: 999px; white-space: nowrap; transition: opacity 1.2s ease; pointer-events: none; z-index: 4; }
+  .hint.gone { opacity: 0; }
+
+  /* ---- her words, live above her head ---- */
+  .speech { position: fixed; left: 0; top: 0; z-index: 3; width: min(290px, calc(100vw - 24px)); text-align: center; pointer-events: none;
+            font-size: 18px; font-weight: 700; line-height: 1.32; color: var(--ink); transition: opacity .45s ease; overflow-wrap: anywhere;
+            text-shadow: 0 0 1px #fffaf0, 2px 0 0 #fffaf0, -2px 0 0 #fffaf0, 0 2px 0 #fffaf0, 0 -2px 0 #fffaf0, 1.6px 1.6px 0 #fffaf0, -1.6px 1.6px 0 #fffaf0, 1.6px -1.6px 0 #fffaf0, -1.6px -1.6px 0 #fffaf0, 0 3px 6px rgba(91,73,68,.25); }
+  .speech.out { opacity: 0; }
+  .speech .rest { opacity: 0; }
+  .speech .dots span { display: inline-block; animation: hop 1s ease-in-out infinite; }
+  .speech .dots span:nth-child(2) { animation-delay: .15s; } .speech .dots span:nth-child(3) { animation-delay: .3s; }
+  @keyframes hop { 30% { transform: translateY(-5px); } }
+  .echo { position: fixed; left: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 62px); z-index: 4; max-width: min(360px, calc(100vw - 24px));
+          padding: 5px 12px 6px; border-radius: 14px 16px 14px 4px; font-size: 14px; background: var(--sky); transition: opacity .6s ease, transform .6s ease; pointer-events: none; }
+  .echo b { margin-right: 4px; }
+  .echo.out { opacity: 0; transform: translateY(-8px); }
+  .note { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 112px); transform: translateX(-50%); z-index: 7; width: min(360px, calc(100vw - 24px)); padding: 9px 14px; border-radius: var(--wob); font-size: 13px; line-height: 1.45; background: var(--paper); }
+
+  /* ---- chat input (bottom-left) ---- */
+  .chat { position: fixed; left: max(10px, env(safe-area-inset-left, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); width: min(420px, calc(100vw - 20px)); z-index: 4; }
+  .say { display: flex; gap: 6px; align-items: center; }
+  .say input { flex: 1; min-width: 0; height: 42px; border-radius: 14px 16px 13px 15px; padding: 0 13px; font-size: 16px; font-weight: 600; outline: none; -webkit-user-select: text; user-select: text; }
+  .say input::placeholder { color: var(--ink-soft); }
+  .say .sq { width: 42px; height: 42px; border-radius: 13px 15px 12px 14px; display: grid; place-items: center; padding: 0; flex: none; }
+  .say .sq svg { width: 20px; height: 20px; }
+  .say .send { background: var(--pink); }
+  .quick { position: absolute; left: 0; bottom: 52px; border-radius: 16px; padding: 6px; display: grid; gap: 2px; min-width: 230px; }
+  .quick button { border: 0; background: none; text-align: left; padding: 9px 11px; border-radius: 10px; font-size: 15px; font-weight: 700; display: flex; gap: 10px; align-items: center; }
+  .quick button:hover { background: var(--paper-2); }
+  .quick button span { width: 20px; text-align: center; }
+
+  /* ---- sheet: log / missions / shop / notebook / settings ---- */
+  .sheet { position: fixed; inset: 0; z-index: 10; background: rgba(91, 73, 68, .28); display: flex; align-items: flex-end; justify-content: center; animation: fade .2s ease; }
+  @keyframes fade { from { opacity: 0; } }
+  .card { width: min(500px, 100%); max-height: min(84vh, 780px); display: flex; flex-direction: column; border-radius: 26px 30px 0 0; background: var(--paper); border: 2.5px solid var(--ink); border-bottom: 0;
+          padding-bottom: env(safe-area-inset-bottom, 0px); animation: up .3s cubic-bezier(.2,.9,.3,1.15); -webkit-user-select: text; user-select: text; }
+  @media (min-width: 720px) { .sheet { align-items: center; } .card { border-radius: 26px 30px 24px 28px; border-bottom: 2.5px solid var(--ink); box-shadow: 0 5px 0 var(--ink); } }
+  @keyframes up { from { transform: translateY(40px); opacity: 0; } }
+  .shead { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 8px 22px; }
+  .shead h2 { margin: 0; font-weight: 700; font-size: 22px; }
+  .x { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; padding: 0; }
+  .x svg { width: 16px; height: 16px; }
+  .sbody { overflow-y: auto; padding: 4px 20px 24px; display: grid; gap: 11px; align-content: start; }
+  .sbody h3 { margin: 12px 0 0; font-size: 13px; letter-spacing: .06em; color: var(--ink-soft); font-weight: 700; }
+  .ptsline { display: flex; align-items: baseline; gap: 6px; font-size: 14px; color: var(--ink-soft); }
+  .ptsline strong { font-size: 28px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .empty { margin: 0; color: var(--ink-soft); font-size: 14px; font-weight: 600; }
+  .mcard { border-radius: var(--wob); padding: 12px 12px 11px; background: var(--paper-2); border: 2.5px solid var(--ink); display: grid; gap: 8px; }
+  .mtop { display: flex; gap: 10px; align-items: flex-start; }
+  .kicon { width: 30px; height: 30px; flex: none; border-radius: 10px; border: 2px solid var(--ink); background: var(--pink); display: grid; place-items: center; font-size: 15px; }
+  .mtext { margin: 3px 0 0; font-size: 16px; font-weight: 700; line-height: 1.35; }
+  .mmeta { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12.5px; color: var(--ink-soft); padding-left: 40px; }
+  .mmeta .pts { color: var(--ink); background: var(--butter); border-radius: 999px; padding: 0 7px; }
+  .soft { color: var(--ink-soft); font-size: 12.5px; }
+  .mrow { display: flex; gap: 8px; flex-wrap: wrap; }
+  .mcard .mrow { padding-left: 40px; }
+  .btn { height: 38px; padding: 0 16px; border-radius: 12px 14px 11px 13px; border: 2.5px solid var(--ink); background: var(--paper); box-shadow: var(--shadow); font-weight: 700; font-size: 14.5px; }
+  .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+  .btn.ok { background: var(--mint); }
+  .btn.pinky { background: var(--pink); }
+  .btn.wide { width: 100%; height: 44px; }
+  .btn.small { height: 32px; padding: 0 11px; font-size: 13px; }
+  .btn.danger { background: var(--coral); justify-self: start; }
+  .btn:disabled { opacity: .5; cursor: default; box-shadow: none; transform: none; }
+  .past, .mem, .loglist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .past li { display: flex; gap: 8px; align-items: baseline; font-size: 13.5px; color: var(--ink-soft); }
+  .st { flex: none; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; border: 1.5px solid var(--ink); color: var(--ink); }
+  .st.done { background: var(--mint); } .st.skipped, .st.missed { background: var(--coral); } .st.dropped { background: var(--grey); }
+  .foot { margin: 6px 0 0; font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; font-weight: 600; }
+  .tabs { display: flex; gap: 6px; }
+  .tabs button { flex: 1; height: 36px; border-radius: 12px; border: 2.5px solid var(--ink); background: var(--paper); font-weight: 700; }
+  .tabs button[aria-selected=true] { background: var(--pink); box-shadow: var(--shadow); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .item { border-radius: var(--wob); border: 2.5px solid var(--ink); background: var(--paper-2); padding: 8px 8px 10px; display: grid; gap: 4px; text-align: center; }
+  .item canvas { width: 100%; height: 86px; display: block; }
+  .item .nm { font-size: 14px; font-weight: 700; line-height: 1.25; }
+  .item .ds { font-size: 11.5px; color: var(--ink-soft); line-height: 1.3; min-height: 15px; }
+  .item.owned { background: var(--mint); }
+  .item.locked canvas { opacity: .45; filter: grayscale(.6); }
+  .item .btn { height: 32px; font-size: 13px; padding: 0 8px; }
+  .ladder { border-radius: var(--wob); border: 2.5px solid var(--ink); padding: 14px 14px 12px; background: linear-gradient(135deg, var(--pink), var(--butter)); display: grid; gap: 10px; }
+  .ladder .now { font-size: 22px; font-weight: 700; line-height: 1.2; }
+  .ladder .lbl { font-size: 12px; color: var(--ink-soft); font-weight: 700; letter-spacing: .05em; }
+  .bar { position: relative; height: 26px; border-radius: 999px; border: 2.5px solid var(--ink); background: var(--paper); overflow: hidden; display: flex; }
+  .bar i { flex: 1; border-right: 1.5px dashed rgba(91,73,68,.35); display: grid; place-items: center; font-style: normal; font-size: 11px; color: var(--ink-soft); position: relative; z-index: 1; }
+  .bar i:last-child { border-right: 0; }
+  .bar i.cur { color: var(--ink); font-weight: 700; }
+  .bar .fillbar { position: absolute; left: 0; top: 0; bottom: 0; background: repeating-linear-gradient(-45deg, #f39ab6 0 8px, #f6aec3 8px 16px); border-right: 2.5px solid var(--ink); }
+  .ends { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-soft); font-weight: 700; }
+  .imp { border-radius: var(--wob); padding: 12px 14px; background: var(--sky); border: 2.5px solid var(--ink); display: grid; gap: 3px; }
+  .imp strong { font-size: 18px; }
+  .imp p { margin: 0; font-size: 14px; color: var(--ink-soft); line-height: 1.45; }
+  .lbl { font-size: 12px; letter-spacing: .05em; color: var(--ink-soft); font-weight: 700; }
+  .today { margin: 0; font-size: 14px; line-height: 1.5; }
+  .mem li { display: grid; grid-template-columns: 56px 1fr; gap: 8px; font-size: 14px; line-height: 1.45; padding: 8px 10px; border-radius: 12px; background: var(--paper-2); border: 1.5px solid rgba(91,73,68,.25); }
+  .mem li.big { background: var(--pink); }
+  .mem time { color: var(--ink-soft); font-size: 12px; padding-top: 1px; }
+  .loglist li { font-size: 14.5px; line-height: 1.45; padding: 6px 10px; border-radius: 12px; background: var(--paper-2); border: 1.5px solid rgba(91,73,68,.2); }
+  .loglist li.me { background: var(--sky); margin-left: 28px; }
+  .loglist li.her { margin-right: 28px; }
+  .loglist li.letter { background: var(--lav); }
+  .loglist li.sys { background: none; border: 0; font-style: italic; color: var(--ink-soft); font-size: 13px; }
+  .loglist b { margin-right: 5px; }
+  .loglist time { margin-left: 6px; font-size: 11px; color: var(--ink-soft); }
+  .field { display: grid; gap: 6px; }
+  .field input, .field select { height: 42px; border-radius: 12px; border: 2.5px solid var(--ink); background: #fff; padding: 0 12px; font-size: 15px; min-width: 0; width: 100%; font-weight: 600; }
+  .field input[type=range] { padding: 0; border: 0; background: none; accent-color: var(--pink-deep); height: 28px; }
+  .field input[type=file] { padding: 8px; height: auto; font-size: 13px; }
+  .field small { font-size: 12px; color: var(--ink-soft); line-height: 1.45; font-weight: 600; }
+  .keyrow { display: flex; gap: 8px; align-items: center; }
+  .keyrow input { flex: 1; }
+  .status { margin: 0; display: flex; gap: 8px; align-items: baseline; font-size: 14px; line-height: 1.5; }
+  .status i { width: 10px; height: 10px; border-radius: 99px; flex: none; background: var(--coral); border: 2px solid var(--ink); transform: translateY(1px); }
+  .status.on i { background: #8fd8aa; }
+  .switch { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 15px; font-weight: 700; }
+  .switch input { width: 46px; height: 26px; appearance: none; -webkit-appearance: none; border-radius: 999px; border: 2.5px solid var(--ink); background: var(--grey); position: relative; cursor: pointer; flex: none; }
+  .switch input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 99px; background: var(--paper); border: 2px solid var(--ink); transition: left .15s ease; }
+  .switch input:checked { background: var(--mint); }
+  .switch input:checked::after { left: 21px; }
+  .toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 62px); transform: translateX(-50%); z-index: 12; padding: 7px 15px; border-radius: 999px; font-size: 14px; font-weight: 700; }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; font-size: 20px; font-weight: 700; color: var(--ink); background: var(--paper); z-index: 20; }
+  @media (prefers-reduced-motion: reduce) { .card, .sheet, .pill.pop, .speech .dots span { animation: none; } }
+</style>
+
+<canvas id="stage" aria-label="Pusheen in her doodled garden under Mount Fuji. Tap to boop her, drag her by the arms, legs or body, drag the background to look around, pinch or scroll to zoom."></canvas>
+
+<header class="top">
+  <div class="left">
+    <div class="chip doodle" aria-label="Local time"><span id="clockIcon"></span><span id="clock">--:--</span><span class="when" id="when"></span></div>
+    <button class="pill doodle press" id="ptsBtn" aria-label="Points and shop"><span class="star">✦</span><span id="pts">0</span></button>
+  </div>
+  <div class="right">
+    <nav class="row" aria-label="Menu">
+      <button class="icon doodle press" id="houseBtn" aria-label="Go inside" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5v-5h4v5"/></svg>
+      </button>
+      <button class="icon doodle press" id="logBtn" aria-label="Chat log">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5h16v10H9.5L5 19.5v-4H4z"/><path d="M8 9.5h8M8 12.5h5"/></svg>
+      </button>
+      <button class="icon doodle press" id="missionsBtn" aria-label="Missions">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h10.5a2 2 0 0 1 2 2V18a3 3 0 0 1-3 3H7"/><path d="M7 3.5A2.5 2.5 0 0 0 4.5 6v1.5H7M7 3.5V18a3 3 0 0 1-3 3"/><path d="M10.5 9h6M10.5 12.5h5"/></svg>
+        <b class="badge" id="badge" hidden>0</b>
+      </button>
+      <button class="icon doodle press" id="shopBtn" aria-label="Shop">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h16l-1.5 11h-13z"/><path d="M8.5 9V7a3.5 3.5 0 0 1 7 0v2"/></svg>
+      </button>
+      <button class="icon doodle press" id="menuBtn" aria-label="Open menu" aria-haspopup="true" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18.5" cy="12" r="2"/></svg>
+      </button>
+    </nav>
+    <div class="moodcard doodle" id="moodcard" data-m="calm" aria-live="polite">
+      <svg id="moodface" viewBox="0 0 30 30" aria-hidden="true"></svg>
+      <div class="m"><small>mood</small><span id="moodTxt">calm</span></div>
+      <div class="e">feeling <span id="emoTxt">calm</span></div>
+    </div>
+  </div>
+</header>
+<div class="drop doodle" id="drop" hidden role="menu">
+  <button data-s="notebook" role="menuitem"><span>✎</span>Her notebook</button>
+  <button data-s="settings" role="menuitem"><span>⚙</span>Settings</button>
+</div>
+<div class="hint doodle" id="hint">tap to boop · drag her arms or legs · swipe to look around</div>
+
+<div class="speech" id="speech" hidden aria-live="polite"><span id="speechText"></span></div>
+<div class="echo doodle" id="echo" hidden></div>
+<div class="note doodle" id="note" hidden role="status"></div>
+
+<section class="chat" id="chat" aria-label="Talk to Pusheen">
+  <form class="say" id="sayForm" autocomplete="off">
+    <button type="button" class="sq doodle press" id="plusBtn" aria-label="Things to do with her" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <input id="say" class="doodle" maxlength="400" placeholder="Say something…" enterkeyhint="send" aria-label="Message to Pusheen">
+    <button type="submit" class="sq doodle press send" aria-label="Send">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
+    </button>
+  </form>
+  <div class="quick doodle" id="quick" hidden>
+    <button data-a="mission"><span>✦</span>Ask her for a mission</button>
+    <button data-a="food"><span>🍙</span>What should I eat?</button>
+    <button data-a="song"><span>♪</span>Tell her what's playing</button>
+    <button data-a="wake"><span>☀</span>Check I wake up at…</button>
+    <button data-a="why"><span>?</span>Why that mood?</button>
+  </div>
+</section>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="stitle">
+    <div class="shead"><h2 id="stitle">Missions</h2>
+      <button class="x doodle press" id="sclose" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="sbody" id="sbody"></div>
+  </div>
+</div>
+<div class="toast doodle" id="toast" hidden role="status"></div>
+<div id="loading">Pusheen…</div>
+
+<script src="sprites.js?v=d59ff94c"></script>
+<script src="scene.js?v=75f09ffe"></script>
+<script src="core.js?v=40485927"></script>
+<script src="brain.js?v=3b88f047"></script>
+<script src="ui.js?v=b91e7938"></script>
+<script src="boot.js?v=b967db83"></script>
+<script>
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});
+</script>
+</body>
+</html>
