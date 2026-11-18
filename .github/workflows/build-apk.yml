@@ -28,12 +28,14 @@ jobs:
           mkdir -p $P/app/src/main/java/com/pusheen/app
           mkdir -p $P/app/src/main/assets
           mkdir -p $P/app/src/main/res/values $P/app/src/main/res/values-v27
-          mkdir -p $P/app/src/main/res/drawable-nodpi $P/app/src/main/res/mipmap-anydpi-v26 $P/app/src/main/res/mipmap-xxxhdpi
+          mkdir -p $P/app/src/main/res/drawable-nodpi $P/app/src/main/res/mipmap-anydpi-v26 $P/app/src/main/res/mipmap-xxxhdpi $P/app/src/main/res/xml $P/app/src/main/res/raw
 
           # Your files from the repo: offline backup copy of the app, and icons
-          cp index.html sprites.js scene.js core.js brain.js ui.js boot.js $P/app/src/main/assets/
+          cp index.html sprites.js scene.js core.js lang.js study.js brain.js games.js ui.js boot.js $P/app/src/main/assets/
           cp app-icon.png $P/app/src/main/res/drawable-nodpi/pusheen_fg.png
           cp icon-512.png $P/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          # Her voice, taken out of sprites.js, for the alarm
+          python3 -c "import re,base64; s=open('sprites.js').read(); m=re.search(r'var VOICE_WAV = \"data:audio/wav;base64,([^\"]+)\"', s); open('$P/app/src/main/res/raw/pusheen_voice.wav','wb').write(base64.b64decode(m.group(1)))"
 
           cat > $P/settings.gradle.kts <<'EOF'
           pluginManagement {
@@ -54,6 +56,7 @@ jobs:
 
           cat > $P/gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx2g
+          android.useAndroidX=true
           EOF
 
           cat > $P/app/build.gradle.kts <<'EOF'
@@ -67,13 +70,16 @@ jobs:
                   applicationId = "com.t4rjpeg.pusheen"
                   minSdk = 26
                   targetSdk = 34
-                  versionCode = 1
-                  versionName = "1.0"
+                  versionCode = 5
+                  versionName = "1.4"
               }
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
                   targetCompatibility = JavaVersion.VERSION_17
               }
+          }
+          dependencies {
+              implementation("androidx.core:core:1.13.1")
           }
           EOF
 
@@ -81,6 +87,22 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+              <uses-permission android:name="android.permission.VIBRATE" />
+              <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+              <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+              <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+              <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+              <queries>
+                  <intent>
+                      <action android:name="android.intent.action.MAIN" />
+                      <category android:name="android.intent.category.LAUNCHER" />
+                  </intent>
+              </queries>
               <application
                   android:label="Pusheen"
                   android:icon="@mipmap/ic_launcher"
@@ -88,6 +110,7 @@ jobs:
                   <activity
                       android:name=".MainActivity"
                       android:exported="true"
+                      android:launchMode="singleTask"
                       android:screenOrientation="portrait"
                       android:windowSoftInputMode="adjustResize"
                       android:configChanges="orientation|screenSize|uiMode|keyboardHidden">
@@ -96,6 +119,35 @@ jobs:
                           <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
                   </activity>
+                  <!-- Her alarm, her reminders, and putting the alarm back after a restart -->
+                  <receiver android:name=".AlarmReceiver" android:exported="false" />
+                  <receiver android:name=".NoticeReceiver" android:exported="false" />
+                  <receiver android:name=".BootReceiver" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.BOOT_COMPLETED" />
+                      </intent-filter>
+                  </receiver>
+                  <service android:name=".AlarmService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+                  <!-- Photos you take for her are kept in the app's private cache -->
+                  <provider
+                      android:name="androidx.core.content.FileProvider"
+                      android:authorities="com.t4rjpeg.pusheen.files"
+                      android:exported="false"
+                      android:grantUriPermissions="true">
+                      <meta-data
+                          android:name="android.support.FILE_PROVIDER_PATHS"
+                          android:resource="@xml/file_paths" />
+                  </provider>
+                  <!-- Lets Pusheen see which song is playing (Android calls this "notification access") -->
+                  <service
+                      android:name=".MusicListener"
+                      android:label="Pusheen (hears your music)"
+                      android:exported="true"
+                      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+                      <intent-filter>
+                          <action android:name="android.service.notification.NotificationListenerService" />
+                      </intent-filter>
+                  </service>
               </application>
           </manifest>
           EOF
@@ -103,20 +155,64 @@ jobs:
           cat > $P/app/src/main/java/com/pusheen/app/MainActivity.java <<'EOF'
           package com.pusheen.app;
 
+          import android.Manifest;
           import android.app.Activity;
+          import android.app.AppOpsManager;
+          import android.app.usage.UsageEvents;
+          import android.app.usage.UsageStatsManager;
+          import android.app.Notification;
+          import android.app.NotificationChannel;
+          import android.app.NotificationManager;
+          import android.app.PendingIntent;
+          import android.content.ComponentName;
+          import android.content.Intent;
+          import android.content.pm.PackageManager;
           import android.graphics.Color;
+          import android.net.Uri;
+          import android.media.MediaMetadata;
+          import android.media.session.MediaController;
+          import android.media.session.MediaSessionManager;
+          import android.media.session.PlaybackState;
+          import android.os.Build;
           import android.os.Bundle;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.provider.MediaStore;
+          import android.provider.Settings;
           import android.view.View;
+          import android.webkit.GeolocationPermissions;
+          import android.webkit.JavascriptInterface;
+          import android.webkit.ValueCallback;
+          import android.webkit.WebChromeClient;
           import android.webkit.WebResourceError;
           import android.webkit.WebResourceRequest;
           import android.webkit.WebSettings;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
+          import androidx.core.content.FileProvider;
+          import org.json.JSONObject;
+          import java.io.File;
+          import java.util.ArrayList;
+          import java.util.Calendar;
+          import java.util.HashMap;
+          import java.util.List;
+          import java.util.Map;
+          import org.json.JSONArray;
 
           public class MainActivity extends Activity {
               private WebView web;
               private static final String SITE = "https://t4rjpeg.github.io/PUSHEEN/";
               private static final String BACKUP = "file:///android_asset/index.html";
+              private MediaSessionManager sessions;
+              private ComponentName listener;
+              private final List<MediaController> watched = new ArrayList<>();
+              private volatile String lastMusic = "{\"playing\":false}";
+              private volatile boolean resumed = false;
+              static volatile boolean visible = false;
+              private ValueCallback<Uri[]> fileCallback;
+              private Uri cameraUri;
+              private GeolocationPermissions.Callback geoCallback;
+              private String geoOrigin;
 
               @Override
               protected void onCreate(Bundle savedInstanceState) {
@@ -129,6 +225,7 @@ jobs:
                   s.setCacheMode(WebSettings.LOAD_DEFAULT);
                   s.setMediaPlaybackRequiresUserGesture(false);   // her voice can play right away
                   s.setAllowFileAccess(true);
+                  s.setGeolocationEnabled(true);
                   // Long presses do nothing (no text menu, no vibration)
                   web.setLongClickable(false);
                   web.setOnLongClickListener(v -> true);
@@ -136,6 +233,46 @@ jobs:
                   web.setVerticalScrollBarEnabled(false);
                   web.setHorizontalScrollBarEnabled(false);
                   web.setOverScrollMode(View.OVER_SCROLL_NEVER);
+                  web.addJavascriptInterface(new Bridge(), "PusheenAndroid");
+                  web.setWebChromeClient(new WebChromeClient() {
+                      // "Take a picture" / "Send a photo" in the chat
+                      @Override
+                      public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> cb, FileChooserParams params) {
+                          if (fileCallback != null) fileCallback.onReceiveValue(null);
+                          fileCallback = cb;
+                          Intent camera = null;
+                          try {
+                              File dir = new File(getCacheDir(), "photos");
+                              dir.mkdirs();
+                              File f = new File(dir, "photo-" + System.currentTimeMillis() + ".jpg");
+                              cameraUri = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".files", f);
+                              camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                              camera.putExtra(MediaStore.EXTRA_OUTPUT, cameraUri);
+                              camera.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                          } catch (Exception e) { camera = null; cameraUri = null; }
+                          Intent pick = new Intent(Intent.ACTION_GET_CONTENT);
+                          pick.addCategory(Intent.CATEGORY_OPENABLE);
+                          pick.setType("image/*");
+                          Intent go;
+                          if (params.isCaptureEnabled() && camera != null) go = camera;
+                          else {
+                              go = Intent.createChooser(pick, "Show her a photo");
+                              if (camera != null) go.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{camera});
+                          }
+                          try { startActivityForResult(go, 42); }
+                          catch (Exception e) { fileCallback.onReceiveValue(null); fileCallback = null; return false; }
+                          return true;
+                      }
+
+                      // "Use my location" in Settings
+                      @Override
+                      public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback cb) {
+                          if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) { cb.invoke(origin, true, false); return; }
+                          geoOrigin = origin;
+                          geoCallback = cb;
+                          requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, 9);
+                      }
+                  });
                   web.setWebViewClient(new WebViewClient() {
                       @Override
                       public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
@@ -147,6 +284,209 @@ jobs:
                   });
                   setContentView(web);
                   web.loadUrl(SITE);
+                  wokeFromAlarm(getIntent());
+              }
+
+              @Override
+              protected void onNewIntent(Intent intent) {
+                  super.onNewIntent(intent);
+                  wokeFromAlarm(intent);
+              }
+
+              // "I'm up" on her alarm: stop ringing
+              private void wokeFromAlarm(Intent intent) {
+                  if (intent != null && "up".equals(intent.getStringExtra("alarm"))) {
+                      try { startService(new Intent(this, AlarmService.class).setAction("stop")); } catch (Exception e) { /* already quiet */ }
+                  }
+              }
+
+              // ---------- what the page can ask the phone ----------
+              private class Bridge {
+                  @JavascriptInterface public boolean hasMusicAccess() { return musicAllowed(); }
+                  @JavascriptInterface public void openMusicAccess() {
+                      runOnUiThread(() -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
+                  }
+                  @JavascriptInterface public String nowPlaying() { return lastMusic; }
+                  @JavascriptInterface public void askNotify() {
+                      if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                          runOnUiThread(() -> requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 7));
+                      }
+                  }
+                  @JavascriptInterface public void notify(String title, String text) { Notices.post(MainActivity.this, title, text); }
+                  @JavascriptInterface public void notifyAt(int seconds, String title, String text) { Notices.at(MainActivity.this, System.currentTimeMillis() + seconds * 1000L, title, text); }
+                  @JavascriptInterface public void setAlarm(int h, int m) { Alarms.setDaily(MainActivity.this, h, m); }
+                  @JavascriptInterface public void cancelAlarm() { Alarms.cancel(MainActivity.this); }
+                  @JavascriptInterface public void setAlarmLines(String json) { Alarms.prefs(MainActivity.this).edit().putString("lines", json).apply(); }
+                  @JavascriptInterface public String alarmLog() {
+                      android.content.SharedPreferences p = Alarms.prefs(MainActivity.this);
+                      return "{\"fired\":" + p.getLong("fired", 0) + ",\"snoozes\":" + p.getInt("snoozes", 0) + ",\"stopped\":" + p.getLong("stopped", 0) + ",\"timedOut\":" + p.getBoolean("timedOut", false) + "}";
+                  }
+                  @JavascriptInterface public void alarmStop() {
+                      android.content.SharedPreferences p = Alarms.prefs(MainActivity.this);
+                      if (p.getLong("fired", 0) > p.getLong("stopped", 0)) {
+                          p.edit().putLong("stopped", System.currentTimeMillis()).apply();
+                          Alarms.rescheduleDaily(MainActivity.this);   // cancels a pending snooze
+                          if (AlarmService.running) runOnUiThread(() -> startService(new Intent(MainActivity.this, AlarmService.class).setAction("stop")));
+                      }
+                  }
+                  @JavascriptInterface public boolean hasUsageAccess() { return usageAllowed(); }
+                  @JavascriptInterface public void openUsageAccess() { runOnUiThread(() -> startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))); }
+                  @JavascriptInterface public String screenTime() { return todaysScreenTime(); }
+                  @JavascriptInterface public boolean inBackground() { return !resumed; }
+              }
+
+              // ---------- music: which song is playing on the phone ----------
+              private boolean musicAllowed() {
+                  String flat = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
+                  return flat != null && flat.contains(getPackageName());
+              }
+
+              private final MediaController.Callback songChanged = new MediaController.Callback() {
+                  @Override public void onMetadataChanged(MediaMetadata m) { sendMusic(); }
+                  @Override public void onPlaybackStateChanged(PlaybackState st) { sendMusic(); }
+                  @Override public void onSessionDestroyed() { watchSessions(); }
+              };
+
+              private void startMusic() {
+                  if (!musicAllowed()) return;
+                  try {
+                      if (sessions == null) {
+                          sessions = (MediaSessionManager) getSystemService(MEDIA_SESSION_SERVICE);
+                          listener = new ComponentName(this, MusicListener.class);
+                          sessions.addOnActiveSessionsChangedListener(list -> watchSessions(), listener);
+                      }
+                      watchSessions();
+                  } catch (Exception e) { /* access was turned off */ }
+              }
+
+              private void watchSessions() {
+                  try {
+                      for (MediaController c : watched) c.unregisterCallback(songChanged);
+                      watched.clear();
+                      for (MediaController c : sessions.getActiveSessions(listener)) {
+                          c.registerCallback(songChanged, new Handler(Looper.getMainLooper()));
+                          watched.add(c);
+                      }
+                  } catch (Exception e) { /* ignore */ }
+                  sendMusic();
+              }
+
+              private String appName(String pkg) {
+                  try {
+                      PackageManager pm = getPackageManager();
+                      return pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString();
+                  } catch (Exception e) {
+                      if (pkg.contains("spotify")) return "Spotify";
+                      if (pkg.contains("youtube")) return "YouTube";
+                      if (pkg.contains("deezer")) return "Deezer";
+                      return "";
+                  }
+              }
+
+              private void sendMusic() {
+                  String now = "{\"playing\":false}";
+                  try {
+                      for (MediaController c : watched) {
+                          PlaybackState st = c.getPlaybackState();
+                          MediaMetadata md = c.getMetadata();
+                          if (st != null && st.getState() == PlaybackState.STATE_PLAYING && md != null) {
+                              String title = md.getString(MediaMetadata.METADATA_KEY_TITLE);
+                              if (title == null || title.isEmpty()) continue;
+                              JSONObject o = new JSONObject();
+                              o.put("playing", true);
+                              o.put("title", title);
+                              String artist = md.getString(MediaMetadata.METADATA_KEY_ARTIST);
+                              o.put("artist", artist == null ? "" : artist);
+                              o.put("app", appName(c.getPackageName()));
+                              now = o.toString();
+                              break;
+                          }
+                      }
+                  } catch (Exception e) { /* keep "not playing" */ }
+                  if (now.equals(lastMusic)) return;
+                  lastMusic = now;
+                  if (web != null) web.evaluateJavascript("window.pusheenMusic && pusheenMusic(" + now + ")", null);
+              }
+
+              // ---------- screen time: how long each app was in front today ----------
+              private boolean usageAllowed() {
+                  try {
+                      AppOpsManager ops = (AppOpsManager) getSystemService(APP_OPS_SERVICE);
+                      int mode = Build.VERSION.SDK_INT >= 29
+                          ? ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), getPackageName())
+                          : ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), getPackageName());
+                      return mode == AppOpsManager.MODE_ALLOWED;
+                  } catch (Exception e) { return false; }
+              }
+
+              private String todaysScreenTime() {
+                  try {
+                      if (!usageAllowed()) return "{}";
+                      UsageStatsManager um = (UsageStatsManager) getSystemService(USAGE_STATS_SERVICE);
+                      Calendar c = Calendar.getInstance();
+                      c.set(Calendar.HOUR_OF_DAY, 0); c.set(Calendar.MINUTE, 0); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0);
+                      long now = System.currentTimeMillis();
+                      UsageEvents ev = um.queryEvents(c.getTimeInMillis(), now);
+                      Map<String, Long> since = new HashMap<>(), total = new HashMap<>();
+                      UsageEvents.Event e = new UsageEvents.Event();
+                      String home = "";
+                      try {
+                          Intent hi = new Intent(Intent.ACTION_MAIN); hi.addCategory(Intent.CATEGORY_HOME);
+                          android.content.pm.ResolveInfo ri = getPackageManager().resolveActivity(hi, 0);
+                          if (ri != null && ri.activityInfo != null) home = ri.activityInfo.packageName;
+                      } catch (Exception x) { /* no launcher found */ }
+                      while (ev.hasNextEvent()) {
+                          ev.getNextEvent(e);
+                          String pkg = e.getPackageName();
+                          if (pkg == null || pkg.equals(home) || pkg.startsWith("com.android.systemui")) continue;
+                          if (e.getEventType() == UsageEvents.Event.MOVE_TO_FOREGROUND) since.put(pkg, e.getTimeStamp());
+                          else if (e.getEventType() == UsageEvents.Event.MOVE_TO_BACKGROUND) {
+                              Long s0 = since.remove(pkg);
+                              if (s0 != null) total.put(pkg, (total.containsKey(pkg) ? total.get(pkg) : 0L) + (e.getTimeStamp() - s0));
+                          }
+                      }
+                      for (Map.Entry<String, Long> open : since.entrySet()) total.put(open.getKey(), (total.containsKey(open.getKey()) ? total.get(open.getKey()) : 0L) + (now - open.getValue()));
+                      List<Map.Entry<String, Long>> list = new ArrayList<>(total.entrySet());
+                      list.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
+                      long sum = 0;
+                      for (Map.Entry<String, Long> x : list) sum += x.getValue();
+                      JSONArray top = new JSONArray();
+                      for (int i = 0; i < Math.min(5, list.size()); i++) {
+                          JSONObject o = new JSONObject();
+                          String name = appName(list.get(i).getKey());
+                          o.put("app", name.isEmpty() ? list.get(i).getKey() : name);
+                          o.put("min", Math.round(list.get(i).getValue() / 60000.0));
+                          top.put(o);
+                      }
+                      JSONObject out = new JSONObject();
+                      out.put("total", Math.round(sum / 60000.0));
+                      out.put("top", top);
+                      return out.toString();
+                  } catch (Exception e) { return "{}"; }
+              }
+
+              // ---------- a notification from her ----------
+              @Override
+              protected void onActivityResult(int req, int res, Intent data) {
+                  super.onActivityResult(req, res, data);
+                  if (req != 42 || fileCallback == null) return;
+                  Uri[] out = null;
+                  if (res == RESULT_OK) {
+                      if (data != null && data.getData() != null) out = new Uri[]{data.getData()};
+                      else if (cameraUri != null) out = new Uri[]{cameraUri};
+                  }
+                  fileCallback.onReceiveValue(out);
+                  fileCallback = null;
+              }
+
+              @Override
+              public void onRequestPermissionsResult(int req, String[] perms, int[] results) {
+                  super.onRequestPermissionsResult(req, perms, results);
+                  if (req == 9 && geoCallback != null) {
+                      boolean ok = results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED;
+                      geoCallback.invoke(geoOrigin, ok, false);
+                      geoCallback = null;
+                  }
               }
 
               @Override
@@ -160,15 +500,313 @@ jobs:
               @Override
               protected void onPause() {
                   super.onPause();
+                  resumed = false; visible = false;
                   if (web != null) web.onPause();
               }
 
               @Override
               protected void onResume() {
                   super.onResume();
+                  resumed = true; visible = true;
                   if (web != null) web.onResume();
+                  startMusic();   // also picks up access you just turned on in Settings
               }
           }
+          EOF
+
+          cat > $P/app/src/main/java/com/pusheen/app/Notices.java <<'EOF'
+          package com.pusheen.app;
+
+          import android.app.AlarmManager;
+          import android.app.Notification;
+          import android.app.NotificationChannel;
+          import android.app.NotificationManager;
+          import android.app.PendingIntent;
+          import android.content.Context;
+          import android.content.Intent;
+
+          // Her notifications: they buzz the phone
+          public class Notices {
+              static final String CH = "pusheen_buzz";
+
+              static void channel(Context c) {
+                  NotificationChannel ch = new NotificationChannel(CH, "Pusheen", NotificationManager.IMPORTANCE_HIGH);
+                  ch.enableVibration(true);
+                  ch.setVibrationPattern(new long[]{0, 140, 90, 140});
+                  c.getSystemService(NotificationManager.class).createNotificationChannel(ch);
+              }
+
+              static void post(Context c, String title, String text) {
+                  try {
+                      channel(c);
+                      Intent open = new Intent(c, MainActivity.class);
+                      PendingIntent pi = PendingIntent.getActivity(c, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                      Notification n = new Notification.Builder(c, CH)
+                          .setSmallIcon(android.R.drawable.stat_notify_chat)
+                          .setContentTitle(title)
+                          .setContentText(text)
+                          .setStyle(new Notification.BigTextStyle().bigText(text))
+                          .setAutoCancel(true)
+                          .setContentIntent(pi)
+                          .build();
+                      c.getSystemService(NotificationManager.class).notify((int) (System.currentTimeMillis() % 100000), n);
+                  } catch (Exception e) { /* notifications are off */ }
+              }
+
+              // a reminder she set: shown only if the app isn't open by then
+              static void at(Context c, long when, String title, String text) {
+                  Intent i = new Intent(c, NoticeReceiver.class);
+                  i.putExtra("title", title);
+                  i.putExtra("text", text);
+                  PendingIntent pi = PendingIntent.getBroadcast(c, (int) (when % 100000), i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                  AlarmManager am = c.getSystemService(AlarmManager.class);
+                  try { am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, when, pi); }
+                  catch (SecurityException e) { am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, when, pi); }
+              }
+          }
+          EOF
+
+          cat > $P/app/src/main/java/com/pusheen/app/NoticeReceiver.java <<'EOF'
+          package com.pusheen.app;
+
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+
+          public class NoticeReceiver extends BroadcastReceiver {
+              @Override
+              public void onReceive(Context c, Intent i) {
+                  if (MainActivity.visible) return;   // the app is open: she says it herself
+                  Notices.post(c, i.getStringExtra("title"), i.getStringExtra("text"));
+              }
+          }
+          EOF
+
+          cat > $P/app/src/main/java/com/pusheen/app/Alarms.java <<'EOF'
+          package com.pusheen.app;
+
+          import android.app.AlarmManager;
+          import android.app.PendingIntent;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.content.SharedPreferences;
+          import java.util.Calendar;
+
+          // Her wake-up alarm: every day at the time you chose
+          public class Alarms {
+              static SharedPreferences prefs(Context c) { return c.getSharedPreferences("pusheen", Context.MODE_PRIVATE); }
+
+              static PendingIntent ring(Context c) {
+                  Intent i = new Intent(c, AlarmReceiver.class);
+                  i.setAction("com.pusheen.app.RING");
+                  return PendingIntent.getBroadcast(c, 1, i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+              }
+
+              static void scheduleAt(Context c, long when) {
+                  AlarmManager am = c.getSystemService(AlarmManager.class);
+                  PendingIntent show = PendingIntent.getActivity(c, 2, new Intent(c, MainActivity.class), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                  try { am.setAlarmClock(new AlarmManager.AlarmClockInfo(when, show), ring(c)); }
+                  catch (SecurityException e) { am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, when, ring(c)); }
+              }
+
+              static long next(int h, int m) {
+                  Calendar cal = Calendar.getInstance();
+                  cal.set(Calendar.HOUR_OF_DAY, h); cal.set(Calendar.MINUTE, m); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
+                  if (cal.getTimeInMillis() <= System.currentTimeMillis() + 5000) cal.add(Calendar.DAY_OF_YEAR, 1);
+                  return cal.getTimeInMillis();
+              }
+
+              static void setDaily(Context c, int h, int m) {
+                  prefs(c).edit().putInt("h", h).putInt("m", m).putBoolean("on", true).apply();
+                  scheduleAt(c, next(h, m));
+              }
+
+              static void cancel(Context c) {
+                  prefs(c).edit().putBoolean("on", false).apply();
+                  c.getSystemService(AlarmManager.class).cancel(ring(c));
+              }
+
+              static void rescheduleDaily(Context c) {
+                  SharedPreferences p = prefs(c);
+                  if (p.getBoolean("on", false)) scheduleAt(c, next(p.getInt("h", 7), p.getInt("m", 0)));
+              }
+          }
+          EOF
+
+          cat > $P/app/src/main/java/com/pusheen/app/AlarmReceiver.java <<'EOF'
+          package com.pusheen.app;
+
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+
+          public class AlarmReceiver extends BroadcastReceiver {
+              @Override
+              public void onReceive(Context c, Intent i) {
+                  Intent s = new Intent(c, AlarmService.class);
+                  s.setAction("ring");
+                  c.startForegroundService(s);
+              }
+          }
+          EOF
+
+          cat > $P/app/src/main/java/com/pusheen/app/BootReceiver.java <<'EOF'
+          package com.pusheen.app;
+
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+
+          // Alarms are forgotten when the phone restarts: set it again
+          public class BootReceiver extends BroadcastReceiver {
+              @Override
+              public void onReceive(Context c, Intent i) { Alarms.rescheduleDaily(c); }
+          }
+          EOF
+
+          cat > $P/app/src/main/java/com/pusheen/app/AlarmService.java <<'EOF'
+          package com.pusheen.app;
+
+          import android.app.Notification;
+          import android.app.NotificationChannel;
+          import android.app.NotificationManager;
+          import android.app.PendingIntent;
+          import android.app.Service;
+          import android.content.Intent;
+          import android.content.SharedPreferences;
+          import android.content.pm.ServiceInfo;
+          import android.graphics.drawable.Icon;
+          import android.media.AudioAttributes;
+          import android.media.SoundPool;
+          import android.os.Build;
+          import android.os.Handler;
+          import android.os.IBinder;
+          import android.os.Looper;
+          import android.os.VibrationEffect;
+          import android.os.Vibrator;
+          import org.json.JSONArray;
+
+          // Rings with her voice (little bursts, like she's talking) and buzzes until you get up or snooze
+          public class AlarmService extends Service {
+              static volatile boolean running = false;
+              private SoundPool pool;
+              private int sound, stream;
+              private boolean ringing;
+              private Vibrator vib;
+              private final Handler h = new Handler(Looper.getMainLooper());
+              private static final long[] TALK = {520, 180, 300, 160, 700, 900, 380, 140, 450, 1100};
+
+              @Override public IBinder onBind(Intent i) { return null; }
+
+              @Override
+              public int onStartCommand(Intent intent, int flags, int startId) {
+                  String a = intent == null || intent.getAction() == null ? "ring" : intent.getAction();
+                  SharedPreferences p = Alarms.prefs(this);
+                  if ("stop".equals(a)) {
+                      p.edit().putLong("stopped", System.currentTimeMillis()).apply();
+                      quiet(); stopSelf();
+                      return START_NOT_STICKY;
+                  }
+                  if ("snooze".equals(a)) {
+                      p.edit().putInt("snoozes", p.getInt("snoozes", 0) + 1).apply();
+                      quiet();
+                      Alarms.scheduleAt(this, System.currentTimeMillis() + 9 * 60000L);
+                      stopSelf();
+                      return START_NOT_STICKY;
+                  }
+                  long now = System.currentTimeMillis();
+                  boolean snoozeRing = p.getLong("fired", 0) > now - 3 * 3600000L && p.getLong("stopped", 0) < p.getLong("fired", 0);
+                  if (!snoozeRing) p.edit().putLong("fired", now).putInt("snoozes", 0).putLong("stopped", 0).putBoolean("timedOut", false).apply();
+                  Notification n = notice(p);
+                  if (Build.VERSION.SDK_INT >= 29) startForeground(77, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+                  else startForeground(77, n);
+                  running = true;
+                  if (!snoozeRing) Alarms.rescheduleDaily(this);   // tomorrow, same time
+                  ring();
+                  return START_NOT_STICKY;
+              }
+
+              private Notification notice(SharedPreferences p) {
+                  NotificationChannel ch = new NotificationChannel("pusheen_alarm", "Pusheen alarm", NotificationManager.IMPORTANCE_HIGH);
+                  ch.setSound(null, null);
+                  ch.enableVibration(false);
+                  getSystemService(NotificationManager.class).createNotificationChannel(ch);
+                  String line = "Wake up.", up = "I'm up", snooze = "Snooze 9 min";
+                  try {
+                      org.json.JSONObject o = new org.json.JSONObject(p.getString("lines", "{}"));
+                      JSONArray lines = o.optJSONArray("lines");
+                      if (lines != null && lines.length() > 0) line = lines.getString((int) (Math.random() * lines.length()));
+                      up = o.optString("up", up);
+                      snooze = o.optString("snooze", snooze);
+                  } catch (Exception e) { /* keep the defaults */ }
+                  Intent open = new Intent(this, MainActivity.class);
+                  open.putExtra("alarm", "up");
+                  open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                  PendingIntent openPi = PendingIntent.getActivity(this, 3, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                  PendingIntent snoozePi = PendingIntent.getService(this, 5, new Intent(this, AlarmService.class).setAction("snooze"), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                  return new Notification.Builder(this, "pusheen_alarm")
+                      .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                      .setContentTitle("Pusheen")
+                      .setContentText(line)
+                      .setCategory(Notification.CATEGORY_ALARM)
+                      .setOngoing(true)
+                      .setFullScreenIntent(openPi, true)
+                      .setContentIntent(openPi)
+                      .addAction(new Notification.Action.Builder((Icon) null, up, openPi).build())
+                      .addAction(new Notification.Action.Builder((Icon) null, snooze, snoozePi).build())
+                      .build();
+              }
+
+              private void ring() {
+                  ringing = true;
+                  AudioAttributes aa = new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build();
+                  pool = new SoundPool.Builder().setMaxStreams(1).setAudioAttributes(aa).build();
+                  pool.setOnLoadCompleteListener((sp, id, status) -> talk(0));
+                  sound = pool.load(this, R.raw.pusheen_voice, 1);
+                  vib = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+                  try { vib.vibrate(VibrationEffect.createWaveform(new long[]{0, 400, 300, 400, 1200}, 0), aa); } catch (Exception e) { /* no vibrator */ }
+                  h.postDelayed(() -> {
+                      if (!ringing) return;
+                      Alarms.prefs(this).edit().putBoolean("timedOut", true).apply();
+                      quiet(); stopSelf();
+                  }, 10 * 60000L);
+              }
+
+              private void talk(int step) {
+                  if (!ringing || pool == null) return;
+                  if (step % 2 == 0) stream = pool.play(sound, 1f, 1f, 1, -1, 2.0f);
+                  else if (stream != 0) { pool.stop(stream); stream = 0; }
+                  h.postDelayed(() -> talk(step + 1), TALK[step % TALK.length]);
+              }
+
+              private void quiet() {
+                  ringing = false; running = false;
+                  h.removeCallbacksAndMessages(null);
+                  try { if (pool != null) pool.release(); } catch (Exception e) { /* ignore */ }
+                  pool = null;
+                  try { if (vib != null) vib.cancel(); } catch (Exception e) { /* ignore */ }
+                  stopForeground(STOP_FOREGROUND_REMOVE);
+              }
+
+              @Override
+              public void onDestroy() { if (ringing) quiet(); super.onDestroy(); }
+          }
+          EOF
+
+          cat > $P/app/src/main/java/com/pusheen/app/MusicListener.java <<'EOF'
+          package com.pusheen.app;
+
+          import android.service.notification.NotificationListenerService;
+
+          // Android only shares "what's playing" with apps that have this (empty) listener turned on
+          public class MusicListener extends NotificationListenerService {}
+          EOF
+
+          cat > $P/app/src/main/res/xml/file_paths.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <paths>
+              <cache-path name="photos" path="photos/" />
+          </paths>
           EOF
 
           cat > $P/app/src/main/res/values/themes.xml <<'EOF'
