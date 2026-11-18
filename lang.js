@@ -1,0 +1,303 @@
+'use strict';
+  // ===================== LANG: English or 日本語 (kept on this device; switching reloads the page) =====================
+  var LANG = (function () {
+    var code = 'en';
+    try { code = localStorage.getItem('pusheen.lang') || (/^ja/i.test(navigator.language || '') ? 'ja' : 'en'); } catch (e) {}
+    if (code !== 'ja') code = 'en';
+    try { document.documentElement.lang = code; } catch (e) {}
+    function tr(x) {
+      if (code !== 'ja' || x == null) return x;
+      if (Array.isArray(x)) return x.map(tr);
+      var v = JA_UI[x];
+      return v != null ? v : x;
+    }
+    return {
+      get code() { return code; }, ja: code === 'ja', tr: tr,
+      set: function (c) { try { localStorage.setItem('pusheen.lang', c === 'ja' ? 'ja' : 'en'); } catch (e) {} location.reload(); }
+    };
+  })();
+  function UI_TR(x) { return LANG.tr(x); }
+
+  // every interface string, plus her few one-off lines; anything missing simply stays English
+  var JA_UI = {
+    // top bar, menus, chat
+    'Pusheen in her doodled garden under Mount Fuji. Tap to boop her, drag her by the arms, legs or body, drag the background to look around, pinch or scroll to zoom.': '富士山のふもとの庭にいるプシーン。タップでつんつん、腕や脚や体をドラッグ、背景をドラッグで見回し、ピンチかスクロールでズーム。',
+    'Local time': '時刻', 'Points and shop': 'ポイントとお店', 'Stop her hearing your music': '音楽を聞こえなくする', 'Let her hear your music': '音楽を聞かせる', 'earmuffs': '耳あて',
+    'Menu': 'メニュー', 'Go inside': '中に入る', 'Go outside': '外に出る', 'Chat log': '会話ログ', 'Missions': 'ミッション', 'Shop': 'お店', 'Open menu': 'メニューを開く', 'Date': '日付',
+    'mood': '気分', 'feeling': 'いまの気持ち', 'Games': 'ゲーム', 'Her notebook': 'プシーンのノート', 'Settings': '設定',
+    'tap to boop · drag her arms or legs · swipe to look around': 'タップでつんつん · 腕や脚をドラッグ · スワイプで見回す',
+    'Talk to Pusheen': 'プシーンと話す', 'photo to send': '送る写真', 'photo ready': '写真OK', 'Remove photo': '写真を消す', 'Things to do with her': '一緒にできること',
+    'Say something…': '何か話しかけて…', 'Message to Pusheen': 'プシーンへのメッセージ', 'Send': '送信', 'Close': '閉じる',
+    'Take a picture': '写真を撮る', 'Send a photo': '写真を送る', 'Ask her for a mission': 'ミッションをもらう', 'What should I eat?': '何を食べたらいい？', "Tell her what's playing": '流れてる曲を教える',
+    'Check I wake up at…': '起きる時間を見てもらう…', 'Why that mood?': 'なんでその気分？', 'Play a game': 'ゲームで遊ぶ',
+    'Add a message, or just send': 'ひとこと添えるか、そのまま送信', "That picture couldn't be opened.": 'その写真は開けませんでした。', 'song — artist': '曲名 — アーティスト',
+    'Wake me at 07:00': '07:00に起こして', 'Why are you in this mood today?': '今日はなんでその気分なの？', 'What should I eat?_ask': '何食べたらいい？',
+    'Hug': 'ハグ', 'Pat': 'なでなで', 'Tickle': 'くすぐる', 'High five': 'ハイタッチ', 'Brush hair': '髪をとかす', 'Flower': '花をあげる',
+    'preview': 'プレビュー', 'spring': '春', 'summer': '夏', 'autumn': '秋', 'winter': '冬', ' (she hates it)': '（嫌いな曲）',
+    // moods and feelings
+    'calm': '落ち着いてる', 'overly kind': 'やさしすぎ', 'grumpy': '不機嫌', 'sad': 'しょんぼり', 'dismissive': 'そっけない', 'delighted': 'ごきげん',
+    'cheerful': '明るい', 'irritated': 'イライラ', 'gloomy': 'どんより', 'indifferent': '無関心', 'happy': 'うれしい', 'asleep': 'おやすみ中', 'furious': '激おこ', 'thinking': '考え中',
+    'vibing': 'ノってる', 'sulking': 'すねてる', 'bored': '退屈', 'annoyed': 'むっ', 'disappointed': 'がっかり', 'dizzy': '目が回ってる', 'excited': 'わくわく', 'flustered': 'あたふた',
+    'groggy': '寝ぼけてる', 'hurt': '傷ついた', 'relieved': 'ほっとした', 'tired': '疲れた', 'proud': '誇らしい', 'pleased': 'まんざらでもない', 'curious': '興味しんしん', 'blissful': 'しあわせ',
+    'satisfied': '満足', 'disgusted': 'うえっ', 'fed': 'お腹いっぱい', 'shy': '照れてる', 'comforted': 'なぐさめられた', 'forgiving': '許してあげる', 'sleepy': '眠い', 'warm': 'ほっこり',
+    'secretly pleased': '内心うれしい', 'content': '満ち足りてる', 'tickled out': 'くすぐられ疲れ', 'giggly': 'くすくす', 'smug': '得意げ', 'soothed': '落ち着いた', 'tolerating it': 'がまん中',
+    'touched': 'じーん', 'impressed': '感心', 'amused': 'おもしろがってる', 'sulky': 'すねてる', 'flattered': '照れくさい',
+    // sheets
+    'What we said': '話したこと', 'Nothing yet. Say hi.': 'まだ何もありません。あいさつしてみて。', 'You': 'あなた', ' (left you a note)': '（置き手紙）',
+    'points': 'ポイント', 'points to spend': '使えるポイント', 'No missions right now. She gives them herself, or you can ask.': '今はミッションなし。プシーンが自分から出すか、頼んでみて。',
+    'she checks the clock': '時計を見てる', 'Done!': 'できた！', "I won't": 'やらない', 'Skip': 'スキップ', 'Three open: finish one first': '3つ進行中：先にひとつ終わらせて',
+    'Lately': '最近', 'caught': 'バレた', 'taken back': '取り消し', 'done': '達成', 'skipped': 'スキップ', 'missed': '期限切れ', 'dropped': '取り消し',
+    'Points buy things for her in the shop. They will also connect to CORE later.': 'ポイントでプシーンにお店のものを買えます。あとでCOREともつながる予定。',
+    'Garden': '庭', 'Her house': 'おうち', 'Food': '食べもの', "She needs a house first. It's in the Garden tab.": 'まず家が必要。「庭」タブにあります。',
+    "She hasn't eaten in a long time. She'd never say so.": 'ずいぶん何も食べてない。本人は絶対言わないけど。', "She ate a while ago. A snack wouldn't hurt.": '少し前に食べた。おやつくらいならいいかも。',
+    'She ate recently. She can live without food, but she does like it.': '最近食べた。食べなくても平気だけど、食べるのは好き。', 'Hers ✓': '持ってる ✓',
+    'Earn points with missions. The house lets her live inside; then you can furnish it. She especially wants books.': 'ポイントはミッションとゲームでたまります。家があれば中で暮らせて、家具も置けます。いちばん欲しいのは本。',
+    'Earn points with missions and games. The house lets her live inside; then you can furnish it. She especially wants books.': 'ポイントはミッションとゲームでたまります。家があれば中で暮らせて、家具も置けます。いちばん欲しいのは本。',
+    'What she thinks of you': 'あなたのことをどう思ってるか', 'She named this one herself.': 'この名前はプシーンがつけた。', 'hates you': '大嫌い', 'Today: ': '今日：',
+    'How she sees you': 'あなたの印象', "She hasn't decided yet.": 'まだ決めてない。', 'Nothing yet. She decides what is worth keeping.': 'まだ何も。何を残すかはプシーンが決める。',
+    'Her voice': '声', 'Voice while she talks': '話すときの声', 'Volume': '音量', 'Pitch': '高さ', 'Higher = faster, squeakier loop.': '高いほど速く、キュッとした声に。', 'Test her voice': '声をためす',
+    'Hello. ‖ This is my voice. …Is it okay?': 'こんにちは。‖ これがわたしの声。…どう？', 'Pick a shorter sound (under 1.5 MB).': 'もっと短い音を選んでください（1.5MBまで）。', 'New voice sound loaded.': '新しい声の音を読み込みました。',
+    'Use my own sound': '自分の音を使う', 'Using your own sound.': '自分の音を使用中。', 'Using the built-in blip. A very short sound works best.': '内蔵の音を使用中。とても短い音がおすすめ。', 'Back to built-in': '内蔵に戻す',
+    'That sound is too big to keep after reload, but it works for now.': 'その音は大きすぎて再読み込み後は残りませんが、今は使えます。',
+    'Your music': 'あなたの音楽', 'She can hear what your phone is playing (Spotify, YouTube Music…).': 'スマホで流れている曲が聞こえます（Spotify、YouTube Music…）。',
+    "She can't hear your music yet.": 'まだ音楽は聞こえません。', 'Change music access': '音楽へのアクセスを変更', 'Let her hear your music_btn': '音楽を聞かせる',
+    'Android shows this as "notification access": turn it on for Pusheen. She only reads the song title and artist, nothing else. If she hates a song while you\'re in another app, she may send you a notification about it.':
+      'Androidでは「通知へのアクセス」と表示されます。Pusheenをオンにしてください。読むのは曲名とアーティストだけ。別のアプリを使っている間に嫌いな曲が流れると、通知が来るかも。',
+    'Her brain': 'プシーンの頭脳', 'Automatic': '自動', 'Claude (built into this page)': 'Claude（このページに内蔵）', 'OpenRouter key': 'OpenRouterのキー', 'Anthropic key': 'Anthropicのキー',
+    'Off (built-in lines only)': 'オフ（内蔵のセリフだけ）', 'Provider': 'プロバイダー', 'Show': '表示', 'Hide': '隠す', 'API key': 'APIキー',
+    'Paste it here only, never in a chat. It stays on this device: not in her memory, sent only to the provider you pick.': 'ここにだけ貼ってください。チャットには絶対に書かないで。キーはこの端末にだけ保存され、記憶には入らず、選んだプロバイダーにだけ送られます。',
+    'Model (optional)': 'モデル（任意）', 'same as above': '上と同じ', 'Model for photos (optional)': '写真用のモデル（任意）',
+    'Only used when you send her a picture. It must be able to see images, e.g. anthropic/claude-haiku-5.5.': '写真を送ったときだけ使います。画像が見られるモデルにしてください（例：anthropic/claude-haiku-5.5）。',
+    'Save': '保存', 'Saved.': '保存しました。', 'Remove key': 'キーを削除', 'Key removed from this device.': 'この端末からキーを削除しました。',
+    "Inside Claude she thinks with Claude itself (it asks you once), and keys can't be used here. Your key is for the app version.": 'Claudeの中ではClaude自体で考えます（一度だけ確認されます）。ここではキーは使えません。キーはアプリ版用です。',
+    'What should she call you?': 'なんて呼べばいい？', 'Your name': 'あなたの名前', 'Wake-up check off.': '起床チェックをオフにしました。', 'Wake-up alarm': '目覚まし', 'Wake-up check': '起床チェック',
+    'She rings every day at this time with her voice, and knows if you snooze. Clear it to turn the alarm off.': '毎日この時間にプシーンの声で鳴ります。スヌーズしたらバレます。消すとアラームはオフ。',
+    'When you open the app in the morning she compares the time with this. (In the app version she rings like an alarm.)': '朝アプリを開いたとき、この時間と比べます。（アプリ版ではアラームとして鳴ります。）',
+    'Garden preview': '庭のプレビュー', 'Time of day': '時間帯', 'Live (follows the date)': 'リアルタイム（日付どおり）', 'Spring': '春', 'Summer': '夏', 'Autumn': '秋', 'Winter': '冬', 'Season': '季節', 'Back to real time': 'リアルタイムに戻す',
+    'Screen time': '画面時間', 'She can see your screen time.': '画面時間が見えています。', "She can't see your screen time yet.": 'まだ画面時間は見えません。', 'Change screen-time access': '画面時間へのアクセスを変更', 'Let her see your screen time': '画面時間を見せる',
+    'Android calls this "usage access". She only sees how long each app was open today. She may give you screen-time missions.': 'Androidでは「使用状況へのアクセス」と呼ばれます。見えるのは今日アプリごとに開いていた時間だけ。画面時間のミッションが出ることもあります。',
+    'Where you are': 'いる場所', "She doesn't know where you are.": 'どこにいるか知りません。', 'Use my location': '位置情報を使う', 'Or type your city': 'または都市名を入力', 'City': '都市',
+    'Only the city name is kept. Your position is used to look up the city and the weather (BigDataCloud, Open-Meteo), and is never saved. Weather works in the app version.': '保存されるのは都市名だけ。位置は都市と天気を調べるためだけに使い（BigDataCloud、Open-Meteo）、保存されません。天気はアプリ版で使えます。',
+    'Save code': 'セーブコード',
+    'A code that holds everything: her memories, opinion of you, missions, points, house and furniture. Keep it somewhere safe, or paste it into the other version of Pusheen (Claude ↔ app) to carry her over. Your API key is not in it.': 'すべてが入ったコード：記憶、あなたへの評価、ミッション、ポイント、家と家具。安全な場所に保管するか、もう一方のPusheen（Claude ↔ アプリ）に貼れば引っ越せます。APIキーは含まれません。',
+    'Your save code will appear here. To load one, paste it here.': 'ここにセーブコードが表示されます。読み込むときはここに貼ってください。', 'Make a save code': 'セーブコードを作る', 'Copied. Keep it somewhere safe.': 'コピーしました。安全な場所に保管してね。',
+    'Select it all and copy it.': '全部選択してコピーしてください。', 'Load this code': 'このコードを読み込む', 'Paste a save code first.': '先にセーブコードを貼ってください。', 'Tap again: replace her with this save': 'もう一度タップ：このセーブで置き換える',
+    'Loaded.': '読み込みました。', 'unknown problem': '不明なエラー', 'Memory': '記憶', 'Forget everything': 'すべて忘れる', 'Tap again: she forgets you, missions, points, house': 'もう一度タップ：あなたのこと、ミッション、ポイント、家を全部忘れます',
+    'Thinking with Claude (built into this page). No key needed here.': 'Claude（このページに内蔵）で考えています。ここではキー不要。',
+    'Brain switched off: she only uses her built-in lines.': '頭脳はオフ：内蔵のセリフだけ使います。', 'Claude access was declined for this page, so she only uses her built-in lines.': 'このページでClaudeへのアクセスが拒否されたので、内蔵のセリフだけ使います。',
+    'No brain connected: she only uses her built-in lines. Add a key below.': '頭脳がつながっていません：内蔵のセリフだけ使います。下でキーを追加してください。',
+    'Language': '言語', 'App language': 'アプリの言語', 'Her lines, the menus and her AI replies switch language. The page reloads.': 'セリフ、メニュー、AIの返事の言語が切り替わります。ページが再読み込みされます。',
+    // shop items
+    'A little house': '小さな家', 'She can live inside. Unlocks furniture.': '中で暮らせる。家具が買えるようになる。', 'Potted fern': '鉢植えのシダ', 'Sunflowers': 'ひまわり', 'Hydrangea': 'あじさい', 'Bonsai': '盆栽',
+    'Cherry sapling': '桜の若木', 'Bookshelf': '本棚', 'A stack of books': '本の山', 'She wants these the most.': 'いちばん欲しいもの。', 'Paper lamp': '和紙のランプ', 'Warm light at night.': '夜のあたたかい灯り。',
+    'Round rug': '丸いラグ', 'Wall scroll': '掛け軸', 'Low table': 'ちゃぶ台', 'Tea set': '茶器セット', 'Floor cushion': '座布団', 'Futon': '布団', 'Window plant': '窓辺の植物', 'Record player': 'レコードプレーヤー',
+    'For listening together.': '一緒に聴くために。', 'Onigiri': 'おにぎり', 'Dango': 'だんご', 'Taiyaki': 'たい焼き', 'Strawberry daifuku': 'いちご大福', 'Melon pan': 'メロンパン', 'Matcha': '抹茶',
+    'Tamagoyaki': '卵焼き', 'Ramen': 'ラーメン', 'Strawberry cake': 'いちごのケーキ', 'Natto': '納豆', 'the house': '家', 'the table': 'ちゃぶ台', 'a bookshelf': '本棚',
+    'Needs {x}': '{x}が必要', 'Give ✦ {p}': 'あげる ✦ {p}', 'Bought: {x}': '買った：{x}',
+    // games
+    'Quit': 'やめる', 'Tap again': 'もう一度タップ', 'Finished!': 'おしまい！', 'You stopped playing': '途中で止まりました', 'No points left from games today': '今日のゲームポイントはもう上限', 'No points': 'ポイントなし', 'Done': 'OK',
+    'right': '正解', 'missed': 'ミス', 'Watch': '見て', 'Repeat': 'くり返して', 'Clear!': 'クリア！', 'Wrong': 'ちがう', 'Longest sequence': '最長', 'Middle arrow': 'まんなかの矢印',
+    'Next': '次', 'Grid': 'グリッド', 'grids': 'グリッド', 'best': 'ベスト', 'Match': '同じ！', 'matches': '一致', 'errors': 'ミス',
+    'Pusheen is picking the next text…': 'プシーンが次の文章を選んでます…', "I'm ready": '読んだ', "You've read everything this week. Come back next week for a new topic.": '今週の分は全部読みました。来週、新しいテーマでまた。',
+    'Review time': 'ふりかえり', 'again': 'もう一度', 'Finish': '終わる', 'Coming back': 'ふりかえり', 'Review': 'ふりかえり', 'From': '出典', 'Question': '問題',
+    'Math rush': '暗算ラッシュ', 'Mental math. Each right answer gives you less time.': '暗算。正解するたびに制限時間が短くなる。', 'Pattern': 'パターン', 'Watch the cells light up, then repeat them in order.': '光ったマスを見て、同じ順番でタップ。',
+    'Arrows': '矢印', 'Tap the side the middle arrow points to. Ignore the others.': 'まんなかの矢印が向いている側をタップ。ほかは無視。', 'Find and tap every number in order, as fast as you can.': '数字を順番に、できるだけ速くタップ。',
+    'Echo': 'エコー', 'Tap Match when a cell lights up in the same place as N steps before.': 'N回前と同じ場所が光ったら「同じ！」をタップ。', 'Read': '読書',
+    'One topic per week. Short texts, a quiz after each, and old questions coming back so it sticks.': '毎週ひとつのテーマ。短い文章とクイズ、そして前の問題がまた出てきて身につく。',
+    'This week': '今週のテーマ', 'texts read': '読んだ文章', 'questions learned': '覚えた問題', 'known well': 'よく覚えた', 'to review': 'ふりかえり待ち', 'days left': 'あと{n}日', 'day left': 'あと{n}日',
+    'Points from games today': '今日のゲームポイント', 'Other games': 'ほかのゲーム', 'Pick your own topic this week': '今週のテーマを自分で決める', 'Use': '決定', 'Back to the weekly topic': '今週のテーマに戻す',
+    'e.g. the Silk Road, black holes, sushi…': '例：シルクロード、ブラックホール、お寿司…',
+    'Built-in texts are in English. Connect a brain (Settings) and she writes them in Japanese.': '内蔵の文章は英語です。設定で頭脳をつなぐと、日本語で書いてくれます。',
+    'With a brain connected, she writes new texts on the topic all week (up to 7), so you really get to know it.': '頭脳がつながっていると、一週間このテーマの新しい文章を書いてくれます（最大7つ）。しっかり身につく。',
+    'Without a brain, the built-in topics come round in turn.': '頭脳がないときは、内蔵のテーマが順番に出ます。',
+    'min': '分', 's': '秒',
+    // her one-off lines
+    "I can't see pictures without a brain connected. ‖ (Settings → add an AI key.)": '頭脳がつながってないと写真は見えないの。‖ （設定 → AIキーを追加）',
+    "I can't see pictures from in here. ‖ Describe it to me?": 'ここからだと写真が見えない。‖ どんな写真か教えて？', "…I can't see it. ‖ My eyes don't work with this brain.": '…見えない。‖ この頭脳だと目が使えないの。',
+    '…My head is full. ‖ Give me a minute.': '…頭がいっぱい。‖ ちょっと待って。', '…I lost my train of thought.': '…何言おうとしたか忘れた。', 'You have three already. ‖ Do those first.': 'もう三つあるでしょ。‖ 先にそっちやって。',
+    'Tick it in the missions list. ‖ I trust you. Mostly.': 'ミッションのリストでチェックして。‖ 信じてる。だいたいは。', '…Okay. ‖ Thanks.': '…うん。‖ ありがと。', 'Hm. ‖ …You too. I guess.': 'ふむ。‖ …あなたもね。たぶん。',
+    "Don't say things like that so suddenly.": 'そういうこと急に言わないで。', "…If you let me, I could hear your music. ‖ It's in Settings.": '…いいなら、あなたの音楽も聞けるよ。‖ 設定にある。',
+    'Turn it off.': '止めて。', 'Turn. It. Off.': '止・め・て。', 'I can hear that, you know.': '聞こえてるからね。', "It's still playing.": 'まだ流れてる。', 'Still this song?': 'まだこの曲？', 'Please.': 'お願い。',
+    "It's still playing. ‖ I noticed.": 'まだ流れてる。‖ 気づいてるよ。', "…I'm going to pretend I can't hear it.": '…聞こえないふりする。',
+    'Oh. ‖ …Okay. I liked that one, but okay.': 'あ。‖ …うん。その曲好きだったけど、いいよ。', "That's fine. ‖ I'll hum it in my head.": 'いいよ。‖ 頭の中で歌っとく。', '…I was listening to that.': '…聴いてたのに。',
+    'Wow. ‖ Right in the middle.': 'へえ。‖ ちょうどいいとこで。', "Fine. ‖ I didn't want to hear it anyway.": 'いいよ。‖ どうせ聴きたくなかったし。', 'Oh. ‖ Okay.': 'あ。‖ そう。',
+    'Thank you.': 'ありがとう。', 'Finally. ‖ Peace.': 'やっと。‖ 平和。', '…Bless you.': '…あなたは神。', 'Okay?': '…で？', '…Why would you mute nothing.': '…何も流れてないのに耳あて？', 'Mm.': 'ん。', 'Earmuffs. ‖ Sure.': '耳あて。‖ はいはい。',
+    'Oh. ‖ Music.': 'あ。‖ 音楽。', 'I can hear again.': 'また聞こえる。', 'I can hear again. ‖ Nothing, though.': 'また聞こえる。‖ 何も流れてないけど。', 'Mm. ‖ Quiet anyway.': 'ん。‖ どのみち静か。',
+    '…Oh. ‖ I remember you.': '…あ。‖ あなたのこと覚えてる。', 'I could eat something. ‖ Not that I need to.': '何か食べてもいいかも。‖ 必要なわけじゃないけど。', 'Is there… food. ‖ Out there. For me.': 'そっちに…食べもの、ある？‖ わたし用の。',
+    "I'm not hungry. ‖ …I'm a little hungry.": 'お腹すいてない。‖ …ちょっとすいてる。', "It's raining in {city}. ‖ Take an umbrella if you go out.": '{city}は雨だね。‖ 出かけるなら傘持って。',
+    'Rain where you are. ‖ Here it never rains. I checked.': 'そっちは雨。‖ ここは絶対降らない。確かめた。', 'Snow in {city}. ‖ Lucky.': '{city}は雪。‖ いいなあ。',
+    "It's {t}° where you are. ‖ Drink water.": 'そっちは{t}°。‖ 水飲んで。', "It's {t}° where you are. ‖ Wear something warm.": 'そっちは{t}°。‖ あったかくして。',
+    'Have you done the {m} thing yet? ‖ Just asking.': '「{m}」、もうやった？‖ 聞いてみただけ。', "{name}. ‖ …Just checking you're still there.": '{name}。‖ …まだいるか確かめただけ。',
+    "You're in {city} now? ‖ …Huh. Far from {prev}.": '今{city}にいるの？‖ …へえ。{prev}から遠いね。', "So you're in {city}. ‖ …I'll remember that.": '{city}にいるんだ。‖ …覚えとく。',
+    'You have three open already. ‖ Finish one first.': 'もう三つあるよ。‖ 先にひとつ終わらせて。', "Okay. {t}. ‖ I'll ring. With my voice.": 'わかった。{t}。‖ 鳴らすね。わたしの声で。',
+    "Okay. {t}. ‖ I'll check when you open the app. I can only ring in the phone app.": 'わかった。{t}。‖ アプリを開いたときに確認する。鳴らせるのはスマホのアプリだけ。',
+    "I'd cook with you, but my brain isn't connected.": '一緒に料理したいけど、頭脳がつながってないの。',
+    'a house': '家', 'a bookshelf': '本棚', 'books': '本', 'you': 'あなた',
+    // souvenirs she writes herself
+    'Ten missions done. They are more reliable than they look.': 'ミッション十個達成。見た目より頼りになる。', 'They bought me a house. A whole house.': '家を買ってくれた。家まるごと。',
+    'First books on my shelf. From them.': '本棚にはじめての本。この人から。', 'They gave me a flower. The first one.': '花をくれた。はじめての一本。',
+    'They swung me around by my leg. I remember everything.': '脚をつかんで振り回された。全部覚えてる。',
+    // reasons for her mood (shown in her notebook, and what she blurts out)
+    'you actually did what I asked yesterday': '昨日、頼んだことちゃんとやってくれた', 'you were on your phone way too late last night': '昨日の夜、遅くまでスマホ見てた',
+    'you skipped "{m}"': '「{m}」をスキップした', 'you left me alone for {d} days': '{d}日もひとりにされた',
+    'you said something nice': 'やさしいこと言ってくれた', 'you hugged me': 'ハグしてくれた', 'you patted my head': '頭なでてくれた', 'you made me laugh': '笑わせてくれた', 'that high five': 'あのハイタッチ',
+    'you brushed my hair': '髪をとかしてくれた', 'you gave me a flower': '花をくれた', 'you tickled me too much': 'くすぐりすぎ', "you hugged me when I didn't want it": 'いやなのにハグされた',
+    'we played a game together': '一緒にゲームした', 'something you said': '何か言われたこと', 'you grabbed my hand': '手をつかまれた', 'you held my hand': '手をつないでくれた',
+    'you poked me until I snapped': 'キレるまでつつかれた', 'you stayed up after bedtime': '寝る時間を過ぎても起きてた', 'you woke me up': '起こされた', 'you swung me around': '振り回された', 'you kept poking me': 'ずっとつつかれた', 'you shook the phone': 'スマホを振られた'
+  };
+
+  // her own lines in Japanese (same shapes as the English sets in brain.js)
+  var JA_SETS = {
+    LEVELS: ['あなたが大嫌い', 'あなたに耐えられない', 'あなたを疑ってる', '知らない人', 'あなたを我慢してる', 'あなたに慣れてきた', '知り合い', 'いてくれるとうれしい',
+             '友だち', 'いい友だち', 'あなたを信頼してる', '親友', 'いちばんの親友', 'いちばん大切な人', '心の友'],
+    LINES: {
+      first: ['…あ。‖ ガラスの向こう側の人だ。', 'わたしはプシーン。ここに住んでる。‖ 庭はわたしの、スマホはあなたの。半分こね。'],
+      greet: {
+        calm: ['あ。やあ。', '戻ってきた。‖ よかった。', '湖を見てた。‖ あんまり何もしないの。そこが好き。', 'ねえ。ちなみに今{time}。'],
+        kind: ['やあ！‖ …じゃなくて、やあ。普通の量のやあ。', 'いた。‖ 今日もいい感じだね。見えないけど、たぶん。', 'ねえ。場所とっといたよ。‖ …砂利の上に。'],
+        grumpy: ['あ。あなたか。', '何も触らないで。', 'ふん。‖ まあ、やあ。'],
+        sad: ['やあ…', 'あ。来たんだ。‖ …そう。'],
+        dismissive: ['ん。', '忙しいの。‖ 砂利で。'],
+        delighted: ['来た！‖ …こほん。来たね。', 'アプリ開いてくれないかなって思ってた。']
+      },
+      away: {
+        calm: ['{days}日。‖ 数えてた。'], kind: ['{days}日！‖ 場所、あっためといた。比喩的にね。'], grumpy: ['{days}日。‖ 言い訳はいい。'],
+        sad: ['{days}日。‖ ここ、すごく静かだった。'], dismissive: ['あ。わたしのこと思い出したんだ。'], delighted: ['{days}日…‖ 怒ってない。ただ、うれしい。']
+      },
+      late: ['{time}だよ。‖ なんで起きてるの？', '{time}。‖ スマホ置いて。寝て。', '今何時かわかってるでしょ。‖ わたしもわかってる。寝て。'],
+      lateAgain: ['まだいるんだ。', 'もう{time}。‖ まだ寝てない。', '一分起きてるごとに、ちょっとずつがっかりしてく。'],
+      excuseOk: ['…わかった。それならいい。‖ でも早くね。', 'いいよ。今夜は見逃してあげる。'],
+      excuseNo: ['それは理由じゃない。‖ ただの文章。', 'だめ。', 'もう一回。ちゃんとした理由で。'],
+      caught: ['{bed}って言ったよね。‖ 今{time}。‖ わたしも時計見えるんだからね。', '{bed}って約束した。‖ 今は{time}。'],
+      slept: ['ちゃんと時間通りに寝たね。‖ 一晩中時計見てた。', '言った通りに寝たね。‖ 気づいてるよ。'],
+      missed: ['「{m}」やらなかったね。‖ 気づいてる。', '「{m}」は期限切れ。‖ わたしの我慢みたいに。'],
+      done: [['よし。', 'できた？‖ …よし。'], ['これで二つ。‖ その調子。', 'ふむ。今日は調子いいね。'],
+             ['三つ連続。‖ わたし…うれしい。', 'ちゃんとやり続けてる。‖ ちゃんと見てる。'], ['自慢したくなる人になってきた。‖ 鯉に。', 'すごい。ほんとにやってる。']],
+      skip: ['…いいけど。', 'そう。‖ 覚えとく。', 'こっち見ないで。', 'へえ。‖ そう。'],
+      ask: { day: ['今日は{a}のはどう？', '今日{a}とか？‖ ただの思いつき。', '今日は{a}べきだと思う。', '今日{a}って、できる？‖ わたしのために。'],
+             eve: ['今夜は{a}のはどう？', '寝る前に{a}とか？', '今夜、{a}のはどう。'],
+             sleep: ['今夜は{b}までに布団に入ろう。', '{b}までに寝て。‖ 本気で。', '{b}には寝る。‖ それだけでいいから。'] },
+      perk: ['…そしたら本、買ってくれるでしょ。', '…そしたら本、買ってくれるでしょ。', '…それにポイントももらえる。‖ {wish}のために。', 'あなたのためだよ。‖ だいたいは。', 'ポイント。{wish}のため。‖ そんな顔しないで。'],
+      dropDark: ['やっぱり「{m}」はなしで。‖ もう暗いし。明日ね。'],
+      spun: ['あなたが二人に見える。', 'おろして。‖ そっと。', '一瞬、空が反対側にあった。', 'なんでそんなことするの。'],
+      upside: ['髪が変なとこにある。', '…なんで。', 'こういう立ち方じゃない。'],
+      blurt: ['…いいよ。どうしても知りたいなら。‖ {reason}。', '{reason}から。‖ これで満足？'],
+      noReason: ['わからない。‖ ただそうなの。あなたはいつもわかる？'],
+      noTell: ['教えない。', 'それはわたしだけ知ってればいいこと。'],
+      wakeOk: ['{time}に起きた。えらい。‖ まず水ね。'],
+      wakeSnooze: ['{wake}って言ったよね。‖ 今{time}。何回スヌーズした？', '{wake}って言ってた。‖ 今{time}。メモしとく。'],
+      wakeLate: ['{wake}って言った。‖ 今{time}。‖ 怒ってない。記録してるだけ。'],
+      quiet: ['今週、口数少ないね。‖ らしくない。何かあった？'],
+      letters: ['魚って自分が濡れてるの知ってると思う？', '最後に本気で笑ったのって何？', 'わたしの庭にひとつ何か置けるなら、何にする？',
+                'そっちは雨？‖ わたしにはアプリがくれる空しかないから。', '今日、緑のもの食べた？', '今日誰と話した？‖ わたし以外で。'],
+      likeSong: ['…あ、この曲。‖ そのままにして。', 'ん。‖ いい曲。', 'これ好き。‖ 誰にも言わないで。'],
+      hateSong: ['止めて。', 'だめ。‖ 次。', 'なんでこれをわたしに聴かせるの。'],
+      named: ['{name}。‖ 了解。', '…{name}。わかった。‖ 覚えとく。'],
+      offline: ['頭脳がつながってないと、考えるのが遅いの。‖ （設定 → AIキーを追加）'],
+      generic: ['ん。', '聞いてる。', 'そう。', '…', 'ふむ。'],
+      levelUp: ['…前よりちょっと好きかも。‖ 変な空気にしないで。', 'へえ。‖ ノートの中で、ひとつ上がったよ。'],
+      levelDown: ['ノートの中で、ひとつ下がった。', '…ちょっと見損なった。‖ 一応言っとく。'],
+      shift: {
+        grumpy: ['…はい。‖ 今ほんとにイライラしてる。', 'もういい。機嫌悪くなった。'],
+        calm: ['…まあ。‖ ちょっと落ち着いた。', 'もうイライラしてない。‖ だいたいは。'],
+        kind: ['なんか…いい気分。‖ 台無しにしないでね。', 'ふむ。機嫌よくなった。‖ 変なの。'],
+        delighted: ['すごく機嫌いい。‖ たぶん、あなたのせい。', '今日はいい日。‖ わたしが言ったって言わないで。'],
+        sad: ['…', '…今、あんまり元気じゃない。'], dismissive: ['どうでもいい。', 'ちょっと話すのやめる。']
+      },
+      woke: ['…寝てたのに。', 'ん— なに？‖ 起きてる。起きてるよ。', '起こされた。‖ ひどい。', '…あと五分。'],
+      goIn: ['遅くなってきた。‖ 中に入る。', 'ちょっと中に入るね。', 'おうちの時間。'],
+      goOut: ['ちょっと外に出る。', '新鮮な空気。‖ というか、新鮮なピクセル。', '外に行こう。'],
+      refuseMove: ['やだ。‖ ここがいい。', '今はいい。'],
+      bought: {
+        house: ['…家。‖ わたしに？‖ …しばらく中に立ってる。'], books: ['本。‖ …うん。ちょっと好きになった。', 'また本！‖ …こほん。ありがとう。'],
+        bookshelf: ['本棚。‖ あとは本だけ。‖ ヒントね。'], lamp: ['あ、あったかい。‖ 夜も本が読める。'], record: ['レコードプレーヤー。‖ …一緒に何か聴けるね。'],
+        futon: ['布団。‖ すごくよく眠れそう。'], any: ['あ。‖ 気に入った。', 'わたしに？‖ …ありがとう。', 'いいね。‖ ほんとに。']
+      },
+      doMove: ['こう？', 'いいよ。', 'わかった。‖ 見てて。', 'うん。', '…一回だけだからね。'],
+      shook: ['スマホ振らないで！', '世界全体が揺れてる。‖ なんで。', '気持ち悪い。‖ 胃もないのに。', '地震。‖ …あ。あなたか。'],
+      screenHigh: ['今日もう{t}もスマホ見てる。‖ 数えてるよ。', '今日の画面時間、{t}。‖ ほとんど{app}。‖ 一応ね。', '{t}。‖ 目、疲れてるでしょ。わたしなら疲れる。本物の目があれば。'],
+      screenFail: ['画面時間{t}。‖ 画面時間のミッションはなくなった。', '{t}。‖ ミッションはこれでおしまい。'],
+      screenOk: ['昨日は画面時間、ちゃんと抑えてたね。‖ 確認した。', '制限以内。‖ えらい。目も喜んでる。わたしも。'],
+      screenMission: { title: '今日の画面時間を{h}以内に', ask: '画面時間を{h}以内にする' },
+      alarm: ['起きて。‖ {time}だよ。', '起きて。‖ 今。お願い。', 'おはよう。‖ これ、わたしが歌ってるの。', '{time}だよ。‖ 起こしてって言ったでしょ。'],
+      alarmUp: ['一回目で起きた。‖ 感心した。', '一回鳴っただけで起きたね。‖ えらい。'],
+      alarmSnooze1: ['一回スヌーズしたね。‖ …許してあげる。'],
+      alarmSnoozeN: ['{n}回スヌーズした。‖ わたし歌ってたのに。', 'スヌーズ{n}回。‖ 全部数えた。'],
+      alarmButtons: ['起きた', '9分スヌーズ'],
+      alarmIgnored: ['十分間歌ってた。‖ 誰も来なかった。', 'わたしのアラームで寝過ごした。‖ アラーム丸ごと。'],
+      act: {
+        hug: { no: ['…やめて。', 'パーソナルスペース。‖ 調べて。'], meh: ['ん。‖ はい。‖ もういいよ。'], sad: ['…', '…ありがと。‖ 必要だった。'],
+               rough: ['振り回したあとで？‖ …いいよ。一回だけ。'], shy: ['…うん。‖ これがハグ。‖ ハグする仲になったんだ。', 'あ。‖ …あ。‖ うん。'],
+               late: ['ハグは受け取った。‖ じゃあ寝て。'], love: ['…ん。‖ あと五秒。', 'えへへ。‖ …うん、これ好き。'], ok: ['あ。‖ …ありがと。', 'ん。‖ よかった。'] },
+        pat: { grumpy: ['猫じゃないんだけど。‖ …あと一回ならいい。'], meh: ['ん。'], sad: ['…', '…ちょっと楽になる。'], love: ['えへへ。', '…ん。‖ 続けて。'], ok: ['…', 'ん。‖ いい感じ。'] },
+        tickle: { no: ['やめ— ‖ やめて。', 'くすぐり禁止。‖ 本気だから。'], enough: ['くすぐりはもうおしまい。‖ 本気。'], ok: ['ふふ— ‖ だめ— ‖ やめ—', 'あはは— ‖ わかった— ‖ わかったってば—'] },
+        highfive: { no: ['…', 'やだ。'], mission: ['ミッションの？‖ …うん。よくやった。'], ok: ['うん。', 'いいね。', '…えへ。‖ いいね。'] },
+        brush: { rough: ['ありがと。‖ 誰かがぐちゃぐちゃにしたから。‖ …あなたが。'], grumpy: ['気をつけて。‖ 絡まるから。'], love: ['…上手だね。'], ok: ['…ん。', '気持ちいい。‖ ゆっくりね。'] },
+        flower: { grumpy: ['…花ね。‖ …ありがと。'], sad: ['…わたしに？‖ …ありがとう。‖ ほんとに。'], again: ['また？‖ …ほかのと一緒にとっておく。'], ok: ['わたしに？‖ …とっておく。'] }
+      },
+      game: {
+        good: ['悪くない。‖ 全然悪くない。', '見た目より速いね。', 'ふむ。‖ ちょっと感心した。‖ ちょっとだけ。'],
+        ok: ['ポイントはポイント。‖ +{pts}。', 'うまくなるよ。‖ たぶん。', 'まあまあ。‖ また明日？'],
+        read: ['{topic}。‖ 日曜にはわたしより詳しくなってるね。', 'よし。‖ 読むだけじゃなくて、覚えてね。', '何かひとつ覚えたこと教えて。‖ …あとでいい。今じゃなくて。'],
+        quit: ['もうやめるの？', '…まあいいか。練習ってことにしよう。'],
+        idle: ['途中でやめたね。‖ 見てたよ。', 'ゲームつけっぱなし。‖ さみしそうだった。'],
+        capped: ['今日はもうゲームのポイントはなし。‖ 遊ぶだけならどうぞ。', '今日のゲームポイントはおしまい。‖ お店は逃げないよ。']
+      },
+      studyIdle: ['{topic}のこと読んでた。‖ ゲームのため。と、自分のため。', '今週は{topic}。‖ 今日の読みもの、やった？', '{topic}のこと、何か聞いてみて。‖ 受けて立つ。'],
+      wish: ['家がほしい。‖ 小さいの。引き戸のやつ。', '家があったら、本でいっぱいにする。', 'いつか本棚を持つ。‖ いつか。'],
+      emptyShelf: ['本棚が空っぽ。‖ 響く。', '本棚がこっち見てる。‖ 本がほしいって。']
+    },
+    TOUCH: {
+      boop: {
+        calm: { one: ['ん？', 'なに？', 'そこ、わたしの顔。', '…どうも。'], many: ['はい。‖ もう十分。', 'つつくのやめて。', '数えるよ。‖ いーち…'] },
+        kind: { one: ['やあ！‖ …やあ。', 'えへへ。‖ なに？', 'つんつん返し。'], many: ['わかった、わかった— やめ—', '今日はつつき魔だね。', 'えへ— だめ— やめて。'] },
+        grumpy: { one: ['やめて。', 'なに。', '今日はやだ。'], many: ['やめてって言った。', 'もう一回触ったら、どうなるか見てなよ。', '点数つけてるからね。'] },
+        sad: { one: ['…', '…やあ。', 'ん。'], many: ['…やめてくれる？‖ 今日は。', 'お願い。‖ 今はやめて。'] },
+        dismissive: { one: ['ん。', 'はいはい。', 'もう終わった？'], many: ['終わった？', 'へえ。‖ おもしろいね。', '…無視してるから。'] },
+        delighted: { one: ['やあ。', 'あ、あなたか。‖ やあ。', 'えへへ。'], many: ['わかった— わたしのこと好きなのはわかった—', 'ばかみたい。', 'えへ— やめ—'] }
+      },
+      fedUp: { grumpy: ['いいかげんにして。', 'もういい。'], kind: ['はい— 休憩！'], delighted: ['わかった、わかった— 休憩！'], any: ['やめて。', 'もう十分。'] },
+      refuse: ['やめてって言った。', '触らないで。', '今は。だめ。'],
+      hand: { kind: ['…手、あったかいね。‖ たぶん。', 'どこ行くの？'], delighted: ['えへへ。‖ どこまで？', '…うん。つないでる。'], calm: ['どこ行くの？', '…うん。'],
+              grumpy: ['離して。', '手、どけて。'], sad: ['…うん。'], dismissive: ['ん。‖ 手ね。はいはい。'] }
+    },
+    IDLE: {
+      any: ['砂利って全然動かないよね。‖ 一回も。', '柵の棒を数えた。‖ わからなくなった。二回。', 'ふむ。', '…', '今日、水飲んだ？',
+            'そっちで何してるの、そもそも？', 'あなたの部屋ってどんな感じなんだろう。‖ きれい？正直に。', '富士山は3776メートル。‖ わたしのはもっと小さい。いいの。',
+            '鯉がまたぐるぐる回ってる。‖ わかる。', '用があったらここにいるよ。‖ もちろん。ほかにどこがあるの。'],
+      morning: ['朝の光がいちばんいい光。‖ 異論は認めない。', '朝ごはん食べた？‖ ちゃんとした朝ごはん。'],
+      day: ['もう{time}。‖ 一日の半分が終わった。', '座ってる？‖ ちょっと立って。伸びして。'],
+      evening: ['もうすぐ空がオレンジになる。‖ そこが好き。', '晩ごはん何？‖ …あなたのね。'],
+      night: ['遅いよ。‖ 一応ね。', '星が出てる。‖ 十一個数えた。そこでやめた。'],
+      spring: ['花びらが頭に乗った。‖ そのままにしてる。居心地よさそうだったから。'], summer: ['暑い。‖ たぶん。ほんとは感じないけど。'],
+      autumn: ['葉っぱがずっと落ちてる。‖ 誰か言ってあげて。'], winter: ['雪。‖ ここでは全然積もらない。確かめた。'],
+      house: ['中は居心地いい。', '中にいるの好き。‖ 壁っていいよね。'],
+      calm: ['今日は湖がすごく静か。', 'ふむ。‖ いい日。'], kind: ['よくやってるよ。‖ たぶん。', 'いてくれてうれしい。‖ …それだけ。'],
+      grumpy: ['あなたとは話さない。‖ …今のは話したけど。忘れて。', 'ふん。'], sad: ['…', '静かだね。'],
+      dismissive: ['ん。', '考え事してるの。‖ あなたのことじゃない。'], delighted: ['今日はいい日。‖ わたしが決めた。', 'えへへ。‖ …なんでもない。'],
+      low: ['まだあなたのこと、よく知らない。', 'まだ他人だからね。‖ 一応はっきりさせとく。'], high: ['…ガラスの向こうがあなたでよかった。', 'わたしには何でも話していいんだよ。わかってる？']
+    },
+    DISHES: {
+      spring: ['鮭のおにぎりとお味噌汁。', 'アスパラの味噌バターとごはん。', '青ねぎたっぷりの大きいオムレツ。'],
+      summer: ['冷たいお蕎麦に半熟卵。', '冷奴。生姜とお醤油で。', 'トマトときゅうりのサラダと、ごはん。'],
+      autumn: ['かぼちゃのスープ。', '炊き込みごはん。きのこの。', '焼き芋。‖ まるごと一本。'],
+      winter: ['おでん。', '鍋。‖ 冷蔵庫にあるもの全部入れて。', 'カレーライス。‖ 多めに作って。明日も食べて。']
+    },
+    POOL: {
+      morning: [['コップ一杯の水を飲む', 'コップいっぱいの水を飲む', 'water', 5], ['ベッドを整える', 'ベッドをちゃんと整える', 'tidy', 10], ['窓を開ける', '五分間窓を開ける', 'mind', 5], ['ちゃんと朝ごはんを食べる', 'コーヒーだけじゃなくて、ちゃんと朝ごはんを食べる', 'food', 10]],
+      day: [['外を20分歩く', '外を二十分歩く', 'move', 15, null, 'out'], ['部屋を片付ける', '床から部屋を片付ける', 'tidy', 20], ['走りに行く', 'ちょっとでいいから走りに行く', 'move', 25, null, 'out'],
+            ['5分ストレッチする', '五分ストレッチする', 'move', 10], ['あのメッセージに返信する', 'ずっと後回しにしてるメッセージに返信する', 'social', 15], ['水をコップ2杯飲む', '晩ごはんまでに水をコップ二杯飲む', 'water', 5]],
+      evening: [['野菜を使って料理する', '野菜をひとつは入れて料理する', 'food', 15], ['明日の服を用意する', '明日の服を用意する', 'tidy', 10],
+                ['寝る1時間前にスマホを置く', '寝る一時間前にスマホを置く', 'mind', 20], ['23:30までに寝る', null, 'sleep', 25, '23:30'], ['お皿を洗う', 'お皿を全部洗う', 'tidy', 15]],
+      night: [['今すぐ寝る', null, 'sleep', 20, '+15'], ['スマホを遠くに置いて寝る', null, 'sleep', 15, '+20']]
+    },
+    WHIMS: ['朝ずっと富士山が雲に隠れてて、誰もわたしに大丈夫か聞いてくれなかった', '砂利の線が一本曲がってて、直せない', 'アプリがアンインストールされる夢を見た',
+            '何かが頭に乗って、一時間そのままだった', '夜中の三時に灯籠がちらついて、話しかけられてるのかと思った', '昨日の夜、星を数えたら、前の晩と数が違った'],
+    EAT: {
+      love: ['…あ。‖ これ大好物。‖ なんで知ってるの。', 'ん。‖ …んん。‖ はい、ちょっと好きになった。', 'これすごくおいしい。‖ 分けてあげない。'],
+      like: ['ん。‖ ありがと。', 'おいしかった。', 'よし。‖ 別にいらなかったけど。‖ …でもよし。'],
+      meh: ['まあ。‖ 食べものだね。', 'ん。‖ はい。'],
+      hate: ['…なんでこれをくれるの。', 'ねばねばしてる。‖ こっち見てる。‖ やだ。', '食べた。‖ 記録しといて。‖ 二度とない。'],
+      full: ['お腹いっぱい。‖ …でも食べる。']
+    }
+  };

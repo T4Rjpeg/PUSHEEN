@@ -77,14 +77,26 @@
     rubUp:  function () { return [140, 120]; },
     rub:    function (k, tt) { return [152, 214 + 10 * Math.sin(tt * 7.5)]; },
     rubDown: function () { return [60, 40]; },
-    flail:  function (k, tt) { var ph = k === 'L' ? 0 : 1.9; return [75 + 50 * Math.sin(tt * 24 + ph), 95 + 70 * Math.sin(tt * 24 + ph + 0.9)]; }
+    flail:  function (k, tt) { var ph = k === 'L' ? 0 : 1.9; return [75 + 50 * Math.sin(tt * 24 + ph), 95 + 70 * Math.sin(tt * 24 + ph + 0.9)]; },
+    // poses she can take on purpose
+    waveR:  function (k, tt) { return k === 'R' ? [148, 172 + 28 * Math.sin(tt * 11)] : POSES.down(k, tt); },
+    waveL:  function (k, tt) { return k === 'L' ? [148, 172 + 28 * Math.sin(tt * 11)] : POSES.down(k, tt); },
+    cheer:  function (k, tt) { return [156, 172 + 7 * Math.sin(tt * 9 + (k === 'L' ? 0 : 1))]; },
+    point:  function (k, tt) { return k === 'R' ? [92, 88] : POSES.down(k, tt); },
+    highFive: function (k, tt) { return k === 'R' ? [138, 158] : POSES.down(k, tt); },
+    hips:   function () { return [40, -40]; },
+    shrug:  function (k, tt) { return [26, 112 + 6 * Math.sin(tt * 3)]; },
+    clap:   function (k, tt) { return [12, -64 + 22 * Math.sin(tt * 14)]; },
+    cover:  function () { return [14, -166]; },
+    dance:  function (k, tt) { var ph = k === 'L' ? 0 : Math.PI; return [30 + 30 * Math.sin(tt * 7.5 + ph), 60 + 45 * Math.sin(tt * 7.5 + ph + 0.6)]; }
   };
+  var FRONT = { crossFront: 1, clap: 1, cover: 1 };
   var armPlan = { next: 4 }, headPlan = { next: 3 }, leanPlan = { next: 5 }, timers = [];
   function later(sec, fn) { timers.push({ at: t + sec, fn: fn }); }
   function setPose(k, pose) {
     var a = arms[k]; a.pose = pose;
-    if (pose === 'crossFront') a.z = 'front';
-    else if (a.z === 'front') later(0.7, function () { if (arms[k].pose !== 'crossFront') arms[k].z = 'back'; });
+    if (FRONT[pose]) a.z = 'front';
+    else if (a.z === 'front') later(0.7, function () { if (!FRONT[arms[k].pose]) arms[k].z = 'back'; });
   }
   function bothArms(pose) { setPose('L', pose); setPose('R', pose); }
   function planArms() {
@@ -108,8 +120,9 @@
     if (mood.state === 'asleep') { head.target = mood.sleepSide * 0.13; head.shiftT = 0; head.shiftYT = 12; return; }
     if (mood.state === 'fedUp') { head.target = 0.06 * mood.sleepSide; head.shiftT = 0; head.shiftYT = 3; return; }
     if (t < vibe.until) { head.face = vibe.likes ? 'sleep' : 'fedUp'; head.shiftT = 0; head.shiftYT = 2; return; }
+    if (t < headPlan.next && headPlan.locked) return;
     if (wander.dir) { head.face = wander.dir < 0 ? 'lookLeft' : 'lookRight'; head.target = wander.dir * 0.05; head.shiftT = wander.dir * 5; head.shiftYT = 0; headPlan.next = t + rnd(1, 2); return; }
-    if (headPlan.forceTilt && t < headPlan.forceTilt.until) { head.target = headPlan.forceTilt.side * 0.07; head.face = 'main'; head.shiftT = 0; head.shiftYT = 0; return; }
+    if (headPlan.forceTilt && t < headPlan.forceTilt.until) { head.target = headPlan.forceTilt.side * 0.07; head.shiftT = 0; head.shiftYT = 0; return; }
     if (t < headPlan.next) return;
     var tm = TEMPER.name;
     var away = tm === 'dismissive' ? 30 : 13;
@@ -139,9 +152,65 @@
     wander.next = t + rnd(9, 20);
   }
 
+  // ---------- moves she can do on purpose (asked, or because she wants to) ----------
+  var anim = { spin: null, nod: null, shake: null, bow: null, faint: null, float: null, shiver: 0, dance: 0, wiggle: 0, beat: 0 };
+  var moves = { queue: [], until: 0 };
+  function holdPose(which, pose, dur) {
+    (which === 'both' ? ['L', 'R'] : [which]).forEach(function (k) { setPose(k, pose); later(dur, function () { if (arms[k].pose === pose) setPose(k, 'down'); }); });
+  }
+  function headFor(face, target, dur, shiftY) { head.face = face; head.target = target; head.shiftT = target * 50; head.shiftYT = shiftY || 0; headPlan.next = t + dur; }
+  var MOVES = {
+    wave: [2.6, function () { holdPose('R', 'waveR', 2.4); headFor('happy', 0.06, 2.4); }],
+    wave_left: [2.6, function () { holdPose('L', 'waveL', 2.4); headFor('happy', -0.06, 2.4); }],
+    cheer: [2.2, function () { holdPose('both', 'cheer', 2); body.vy -= 520; mark('sparkle', 1.6); headFor('happy', 0, 2); }],
+    point: [2.4, function () { holdPose('R', 'point', 2.2); headFor('lookRight', 0.08, 2.2); }],
+    hips: [3.2, function () { holdPose('both', 'hips', 3); }],
+    cross_arms: [3.2, function () { holdPose('both', 'crossFront', 3); }],
+    hands_behind: [3.2, function () { holdPose('both', 'crossBack', 3); }],
+    shrug: [2, function () { holdPose('both', 'shrug', 1.8); headFor('main', 0.1, 1.8); }],
+    clap: [2.2, function () { holdPose('both', 'clap', 2); var p = headPt(V(830, 380)); word(['パチパチ'], V(p.x + 40, p.y), { size: 48, dur: 1.6 }); }],
+    cover_face: [2.4, function () { holdPose('both', 'cover', 2.2); showFace('boop', 2.2); }],
+    rub_head: [3, function () { setPose('R', 'rubUp'); later(0.4, function () { if (arms.R.pose === 'rubUp') setPose('R', 'rub'); }); later(2.4, function () { if (arms.R.pose === 'rub') { setPose('R', 'rubDown'); later(0.4, function () { if (arms.R.pose === 'rubDown') setPose('R', 'down'); }); } }); headPlan.forceTilt = { side: -1, until: t + 2.6 }; }],
+    stretch: [2.8, function () { holdPose('both', 'cheer', 2.6); showFace('sleep', 2.4); var p = headPt(V(800, 60)); word(['ん〜'], V(p.x + 50, p.y), { size: 50, dur: 1.8 }); }],
+    high_five: [1.8, function () { holdPose('R', 'highFive', 1.6); headFor('happy', 0.05, 1.6); }],
+    hug: [2.8, function () { holdPose('both', 'crossFront', 2.6); body.sqv += 1.4; mark('hearts', 2.4); }],
+    nod: [1.3, function () { anim.nod = { t0: t, dur: 1.2 }; }],
+    shake_head: [1.4, function () { anim.shake = { t0: t, dur: 1.3 }; }],
+    tilt_left: [2.4, function () { headPlan.forceTilt = { side: -1.9, until: t + 2.3 }; }],
+    tilt_right: [2.4, function () { headPlan.forceTilt = { side: 1.9, until: t + 2.3 }; }],
+    look_left: [2.4, function () { headFor('lookLeft', -0.1, 2.3); }],
+    look_right: [2.4, function () { headFor('lookRight', 0.1, 2.3); }],
+    look_down: [2.4, function () { headFor('lookDown', 0, 2.3, 10); }],
+    jump: [1.3, function () { body.vy -= 1300; body.sqv -= 2.2; }],
+    hop: [0.8, function () { body.vy -= 650; body.sqv -= 1.2; }],
+    spin: [1.2, function () { anim.spin = { t0: t, dur: 0.95, dir: Math.random() < 0.5 ? -1 : 1, a0: body.a }; }],
+    bow: [2, function () { anim.bow = { t0: t, dur: 1.8 }; holdPose('both', 'crossFront', 1.8); showFace('lookDown', 1.8); }],
+    dance: [6.4, function () { anim.dance = t + 6.2; holdPose('both', 'dance', 6.2); showFace('happy', 6); }],
+    wiggle: [1.8, function () { anim.wiggle = t + 1.6; }],
+    stomp: [2, function () { for (var i = 0; i < 3; i++) later(i * 0.42, function () { body.vy -= 420; cam.shake = 0.25; }); mark('vein', 1.6); showFace('fedUp', 1.8); var p = headPt(V(800, 100)); word(['ドン', 'ムッ'], V(p.x + 60, p.y), { size: 58 }); emit('buzz', { ms: [60, 360, 60, 360, 60] }); }],
+    faint: [3.2, function () { anim.faint = { t0: t, dur: 3, side: Math.random() < 0.5 ? -1 : 1 }; showFace('sleep', 2.6); }],
+    float_up: [2.8, function () { anim.float = { until: t + 2.6 }; showFace('content', 2.4); }],
+    shiver: [1.7, function () { anim.shiver = t + 1.5; showFace('surprised', 1.5); mark('sweat', 1.4); }],
+    blush: [2, function () { showFace('content', 2); mark('hearts', 2); }],
+    walk_left: [0.5, function () { var r = wanderRange(); wander.target = clamp(wander.x - 520, r[0], r[1]); wander.next = t + 12; }],
+    walk_right: [0.5, function () { var r = wanderRange(); wander.target = clamp(wander.x + 520, r[0], r[1]); wander.next = t + 12; }],
+    come_here: [0.5, function () { var r = wanderRange(), cs = view.k * cam.s; wander.target = clamp(-cam.x / cs, r[0], r[1]); wander.next = t + 12; }],
+    nap: [0.5, function () { setMood('asleep'); }]
+  };
+  function perform(list) {
+    (Array.isArray(list) ? list : [list]).slice(0, 6).forEach(function (m) { if (MOVES[m]) moves.queue.push(m); });
+  }
+  function moveTick() {
+    if (!moves.queue.length || t < moves.until || grab || mood.state === 'fedUp' || PLACE.busy) return;
+    var m = moves.queue.shift(), def = MOVES[m];
+    if (mood.state === 'asleep' && m !== 'nap') setMood('awake');
+    moves.until = t + def[0]; def[1]();
+    armPlan.next = Math.max(armPlan.next, moves.until + 2); headPlan.next = Math.max(headPlan.next, t + def[0]); mood.lastTouch = t;
+  }
+
   // ---------- faces, moods, reactions ----------
   var WORDS = { poke: ['つん', 'ぷに', 'ぽよ'], annoyed: ['ムッ'], gloom: ['ずーん'], relief: ['ふぅ…'], grab: ['!?', 'ひゃ'],
-                wake: ['はっ!', '!?'], refuse: ['やだ!', 'もう!'], zzz: ['Zzz', 'すぴー', 'くー'], note: ['♪', '♫', 'ふんふん'], dizzy: ['@_@', 'ぐるぐる'], giggle: ['えへ', 'ふふっ', 'くすっ'] };
+                wake: ['はっ!', '!?'], refuse: ['やだ!', 'もう!'], zzz: ['Zzz', 'すぴー', 'くー'], note: ['♪', '♫', 'ふんふん'], dizzy: ['@_@', 'ぐるぐる'], giggle: ['えへ', 'ふふっ', 'くすっ'], munch: ['もぐもぐ', 'はむっ'] };
   function word(list, at, opt) { fx.push({ kind: 'word', text: oneOf(list), x: at.x, y: at.y, t0: t, dur: (opt && opt.dur) || 1.15, tilt: rnd(-0.16, 0.16), size: (opt && opt.size) || 72, drift: (opt && opt.drift) || 0 }); }
   function mark(kind, dur) { fx.push({ kind: kind, t0: t, dur: dur, side: Math.random() < 0.5 ? -1 : 1 }); }
   function showFace(name, sec) { react = { face: name, until: t + sec }; }
@@ -259,10 +328,12 @@
   function step(dt) {
     t += dt;
     for (var i = 0; i < timers.length; i++) if (timers[i].at <= t) { var tm = timers.splice(i, 1)[0]; i--; tm.fn(); }
-    planArms(); planHead(); planLean(); planWander(); moodTick();
+    moveTick(); planArms(); planHead(); planLean(); planWander(); moodTick();
 
     var asleep = mood.state === 'asleep', sad = TEMPER.name === 'sad';
     var bob = reduceMotion ? 0 : asleep ? -4 + Math.sin(t * 0.7) * 5 : -10 + Math.sin(t * (sad ? 0.9 : 1.25)) * (sad ? 6 : 9);
+    if (anim.float && t < anim.float.until) bob -= 230 * Math.sin(Math.PI * clamp(1 - (anim.float.until - t) / 2.6, 0, 1));
+    if (t < anim.dance) { var beat = Math.floor(t * 2.4); if (beat !== anim.beat) { anim.beat = beat; body.vy -= 340; if (beat % 2) { var np = headPt(V(Math.random() < 0.5 ? 470 : 840, 80)); word(WORDS.note, np, { size: 46, dur: 1.2, drift: rnd(-30, 30) }); } } }
     var sway = reduceMotion ? 0 : Math.sin(t * 0.8) * (asleep ? 0.02 : 0.012);
 
     // wandering: a slow walk-like drift
@@ -333,12 +404,15 @@
       nb = clamp(nb, -BEND_MAX, BEND_MAX);
       a.ev = wrap(ne - a.e) / dt * 0.3; a.fv = 0; a.e = ne; a.f = ne + nb;
     } else {
-      var shakeX = t < mood.flail ? Math.sin(t * 46) * 900 : 0;
+      var shakeX = t < mood.flail ? Math.sin(t * 46) * 900 : t < anim.shiver ? Math.sin(t * 60) * 700 : 0;
       body.vx += (14 * (wander.x - body.x) - 2 * Math.sqrt(14) * 0.85 * body.vx + shakeX) * dt;
       body.vy += (14 * (bob - body.y) - 2 * Math.sqrt(14) * 0.85 * body.vy) * dt;
       body.x += body.vx * dt; body.y += body.vy * dt;
       var walkLean = wander.dir * 0.06, vibeSway = t < vibe.until && vibe.likes ? Math.sin(t * 2 * Math.PI * 0.95) * 0.06 : 0;
-      spring(body, 'a', 'va', lean + sway + walkLean + vibeSway + (t < mood.flail ? Math.sin(t * 30) * 0.08 : 0), 22, 2 * Math.sqrt(22) * 0.75, 0, dt);
+      var extraA = (t < anim.dance ? Math.sin(t * 2 * Math.PI * 1.2) * 0.13 : 0) + (t < anim.wiggle ? Math.sin(t * 20) * 0.12 : 0);
+      if (anim.faint) { var fu = (t - anim.faint.t0) / anim.faint.dur; if (fu >= 1) anim.faint = null; else extraA += anim.faint.side * 1.25 * Math.sin(Math.PI * Math.min(1, fu * 1.25)) ; }
+      spring(body, 'a', 'va', lean + sway + walkLean + vibeSway + extraA + (t < mood.flail ? Math.sin(t * 30) * 0.08 : 0), 22, 2 * Math.sqrt(22) * 0.75, 0, dt);
+      if (anim.spin) { var su = (t - anim.spin.t0) / anim.spin.dur; if (su >= 1) { body.a = wrap(anim.spin.a0); body.va = 0; anim.spin = null; } else { body.a = anim.spin.a0 + anim.spin.dir * 2 * Math.PI * ease(su); body.va = 0; } }
       body.a = wrap(body.a);
     }
     body.sqv += (-220 * body.sq - 9 * body.sqv) * dt; body.sq += body.sqv * dt;
@@ -374,9 +448,14 @@
 
     var hx = clamp(waistAcc.x, -9000, 9000), ba = wrap(body.a);
     var bobHead = t < vibe.until && vibe.likes ? Math.sin(t * 2 * Math.PI * 1.9) * 0.09 : 0;
+    if (anim.shake) { var shu = (t - anim.shake.t0) / anim.shake.dur; if (shu >= 1) anim.shake = null; else bobHead += 0.16 * Math.sin(shu * Math.PI * 6) * (1 - shu); }
+    if (t < anim.dance) bobHead += Math.sin(t * 2 * Math.PI * 1.2) * 0.08;
     spring(head, 'r', 'v', head.target + bobHead, t < vibe.until ? 90 : 28, 2 * Math.sqrt(28) * 0.8, -hx * 0.00025, dt);
+    var nodY = 0, bowY = 0;
+    if (anim.nod) { var nu = (t - anim.nod.t0) / anim.nod.dur; if (nu >= 1) anim.nod = null; else nodY = 18 * Math.abs(Math.sin(nu * Math.PI * 3)); }
+    if (anim.bow) { var bu = (t - anim.bow.t0) / anim.bow.dur; if (bu >= 1) anim.bow = null; else bowY = 34 * Math.sin(Math.PI * bu); }
     head.shift += (head.shiftT - head.shift) * Math.min(1, dt * 6);
-    head.shiftY += (head.shiftYT - head.shiftY) * Math.min(1, dt * (asleep ? 1.5 : 5));
+    head.shiftY += (head.shiftYT + nodY + bowY - head.shiftY) * Math.min(1, dt * (asleep ? 1.5 : nodY ? 16 : 5));
     // hair hangs toward the ground: barely moves when she's upright, swings all the way round when she's upside down
     var A = wrap(body.a + head.r);
     var wgt = 0.25 + 0.75 * clamp((Math.abs(A) - 0.25) / 1.1, 0, 1);
@@ -422,6 +501,13 @@
         var kk = ease(u / 0.12) * (1 + 0.1 * Math.sin((t - f.t0) * 20) * (1 - u));
         ctx.scale(kk, kk); ctx.strokeStyle = '#161418'; ctx.lineWidth = 8; ctx.lineCap = 'round';
         [[-0.5, 40], [0.1, 52], [0.7, 40]].forEach(function (l) { ctx.beginPath(); ctx.moveTo(Math.sin(l[0]) * 14, -Math.cos(l[0]) * 14); ctx.lineTo(Math.sin(l[0]) * l[1], -Math.cos(l[0]) * l[1]); ctx.stroke(); });
+      } else if (f.kind === 'hearts') {
+        [[830, 90, 1], [480, 120, 0.8], [900, 200, 0.65]].forEach(function (h, j) {
+          var y = h[1] - 90 * ease(u) - j * 12, s2 = h[2] * (0.7 + 0.3 * Math.sin((t - f.t0) * 6 + j));
+          ctx.save(); ctx.translate(h[0], y); ctx.scale(s2, s2);
+          ctx.beginPath(); ctx.moveTo(0, 14); ctx.bezierCurveTo(-34, -10, -16, -40, 0, -20); ctx.bezierCurveTo(16, -40, 34, -10, 0, 14);
+          ctx.fillStyle = '#f39ab6'; ctx.fill(); ctx.lineWidth = 5; ctx.strokeStyle = '#5b4944'; ctx.stroke(); ctx.restore();
+        });
       } else if (f.kind === 'sparkle') {
         [[840, 70, 26], [880, 150, 16], [470, 90, 18]].forEach(function (p, j) { star4(p[0], p[1], p[2] * (0.6 + 0.4 * Math.sin((t - f.t0) * 9 + j * 2)) * ease(u / 0.2), '#e7b93f'); });
       }
@@ -468,7 +554,33 @@
     });
     ['R', 'L'].forEach(function (k) { if (arms[k].z === 'front') drawFore(k); });
     var fnm = faceName(), F = RIG.faces[fnm] || RIG.faces.main;
-    withHead(function () { sprite('face_' + fnm, F.x, F.y); });
+    withHead(function () { sprite('face_' + fnm, F.x, F.y); drawExtras(); });
+  }
+
+  // ---------- earmuffs (music muted for her) and a snack in front of her mouth ----------
+  var extras = { muffs: false, food: null };
+  function drawExtras() {
+    var lw = 7;
+    if (extras.muffs) {
+      ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.strokeStyle = '#5b4944'; ctx.lineWidth = 34; ctx.beginPath(); ctx.moveTo(468, 230); ctx.bezierCurveTo(470, -40, 840, -40, 842, 230); ctx.stroke();
+      ctx.strokeStyle = '#f39ab6'; ctx.lineWidth = 34 - lw * 2; ctx.stroke();
+      [[462, 252], [848, 252]].forEach(function (m) {
+        ctx.beginPath();
+        for (var i = 0; i <= 14; i++) { var a = i / 14 * Math.PI * 2, r = 1 + 0.09 * Math.sin(a * 7); ctx.lineTo(m[0] + Math.cos(a) * 62 * r, m[1] + Math.sin(a) * 76 * r); }
+        ctx.closePath(); ctx.fillStyle = '#f8c4d3'; ctx.fill(); ctx.lineWidth = lw; ctx.strokeStyle = '#5b4944'; ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(m[0] - 14, m[1] - 22, 14, 18, -0.4, 0, Math.PI * 2); ctx.fillStyle = '#fde3eb'; ctx.fill();
+      });
+      ctx.restore();
+    }
+    var f = extras.food;
+    if (f) {
+      var u = (t - f.t0) / f.dur; if (u > 1) { extras.food = null; return; }
+      var size = 230 * (1 - 0.45 * Math.floor(u * 4) / 4), bob = Math.sin(u * Math.PI * 8) * 10;
+      ctx.save(); ctx.globalAlpha = u > 0.85 ? (1 - u) / 0.15 : 1;
+      ctx.drawImage(f.img, 655 - size / 2, 400 - size * 0.25 + bob, size, size * f.img.height / f.img.width);
+      ctx.restore();
+    }
   }
 
   // ---------- hit testing ----------
@@ -537,6 +649,12 @@
     if (grab) {
       cv.classList.add('grabbing');
       press = { x: p.x, y: p.y, at: Date.now(), world: w, type: grab.type, moved: false };
+      var myPress = press;
+      later(0.55, function () {
+        if (press !== myPress || press.moved || pointers.size !== 1 || !grab) return;
+        press.held = true; grab = null; cv.classList.remove('grabbing');
+        emit('hold', { x: press.x, y: press.y });
+      });
       emit('grab', { type: grab.type });
       if (grab.type === 'leg') later(0.25, function () { if (grab && grab.type === 'leg' && press && press.moved) { mark('bang', 1.1); word(WORDS.grab, headPt(V(820, 60))); } });
     }
@@ -558,7 +676,7 @@
     pointers.delete(e.pointerId);
     if (pointers.size < 2) pinch = null;
     if (pointers.size === 0) {
-      var wasBoop = press && !press.moved && Date.now() - press.at < 280, at = press && press.world;
+      var wasBoop = press && !press.moved && !press.held && Date.now() - press.at < 280, at = press && press.world;
       if (grab && grab.type === 'leg' && Math.abs(grab.turned) > Math.PI * 2) {
         var turns = Math.abs(grab.turned) / (Math.PI * 2);
         emit('spun', { turns: turns }); var hp = headPt(V(820, 60)); word(WORDS.dizzy, V(hp.x + 30, hp.y)); showFace('boop', 1.6);
@@ -640,6 +758,29 @@
     get state() { return mood.state; }, get now() { return t; },
     sleep: function () { if (mood.state === 'awake') setMood('asleep'); },
     headTop: function () { return worldToScreen(headPt(V(655, 40))); },
+    // music playing on the phone: she bobs along for as long as a song she likes plays; a song she hates gets a short fit
+    music: function (on, likes) {
+      if (!on) { if (vibe.until > t) vibe.until = t; if (arms.L.pose === 'vibe') bothArms('down'); return; }
+      if (mood.state === 'asleep') setMood('awake');
+      if (likes) { vibe.likes = true; vibe.until = t + 1e6; bothArms('vibe'); later(12, function () { if (arms.L.pose === 'vibe') bothArms('down'); }); }
+      else { vibe.likes = false; vibe.until = t + 5; mood.flail = t + 0.9; bothArms('flail'); mark('vein', 1.4); later(1, function () { if (arms.L.pose === 'flail') bothArms('crossFront'); later(6, function () { if (arms.L.pose === 'crossFront') bothArms('down'); }); }); }
+    },
+    earmuffs: function (on) { extras.muffs = !!on; if (on) { mark('sweat', 1.2); body.sqv += 0.8; } },
+    eat: function (img) {
+      if (mood.state !== 'awake') setMood('awake');
+      extras.food = { img: img, t0: t, dur: 3.4 }; mood.lastTouch = t;
+      var p = headPt(V(800, 300)); word(WORDS.munch, V(p.x + 60, p.y), { size: 54, dur: 1.4 });
+      later(1.5, function () { var q = headPt(V(520, 300)); word(WORDS.munch, V(q.x - 60, q.y), { size: 50, dur: 1.4 }); });
+    },
+    perform: perform, get moving() { return moves.queue.length > 0 || t < moves.until; }, moveNames: function () { return Object.keys(MOVES); },
+    // the phone itself was shaken: she gets thrown around, and dizzy if it goes on
+    jolt: function (ax, ay, strength) {
+      if (grab || PLACE.busy) return;
+      if (mood.state === 'asleep') wakeUp();
+      body.vx += clamp(-ax * 60, -1600, 1600); body.vy += clamp(-ay * 45, -1300, 1300); body.va += clamp(-ax * 0.25, -6, 6) + rnd(-1, 1) * strength;
+      mood.lastTouch = t; showFace('boop', 1.2);
+    },
+    dizzy: function () { showFace('boop', 2.4); var hp = headPt(V(820, 60)); word(WORDS.dizzy, V(hp.x + 30, hp.y)); mark('sweat', 1.4); body.va += rnd(-3, 3); },
     goPlace: goPlace, get place() { return PLACE.name; }, setPlaceNow: function (n) { PLACE.name = n; var off = n === 'house' ? 0 : wander.x; body.x = wander.x = wander.target = off; },
     get temper() { return TEMPER.name; },
     shake: function (s) { cam.shake = s || 0.3; }
