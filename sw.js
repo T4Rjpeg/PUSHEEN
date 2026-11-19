@@ -1,6 +1,6 @@
 // Keeps Pusheen working offline. Online: always asks GitHub for the newest version first.
-const CACHE = 'pusheen-v3';
-const FILES = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'sprites.js', 'scene.js', 'core.js', 'lang.js', 'study.js', 'brain.js', 'games.js', 'ui.js', 'boot.js'];
+const CACHE = 'pusheen-v5';
+const FILES = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'sprites.js', 'extras.js', 'scene.js', 'core.js', 'lang.js', 'study.js', 'brain.js', 'mind.js', 'games.js', 'duo.js', 'ui.js', 'boot.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(

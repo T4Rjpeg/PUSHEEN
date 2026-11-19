@@ -29,7 +29,8 @@
     for (var i = 0; i < 240; i++) step(DT);
     requestAnimationFrame(frame);
     UI.start();
-    BRAIN.start();
+    var bp = BRAIN.start();
+    if (typeof MIND !== 'undefined') Promise.resolve(bp).catch(function () {}).then(function () { MIND.start(); });
     window.PUSHEEN = {
       arms: arms, head: head, body: body, setPose: setPose, boop: boop, bodyPt: bodyPt, screenOf: worldToScreen, BODY: BODY, BRAIN: BRAIN, SCENE: SCENE, UI: UI, cam: cam,
       hand: function (k, d) { return handW(k, d); }, get fx() { return fx; }, get mood() { return mood.state; }, face: faceName, setMood: setMood,

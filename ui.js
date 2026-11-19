@@ -27,7 +27,7 @@
     var VOICE = (function () {
       var cfg = Object.assign({ on: true, vol: 0.35, pitch: 1.9 }, lsGet('pusheen.voice') || {});
       var custom = null; try { custom = localStorage.getItem('pusheen.voice.sound'); } catch (e) {}
-      var ac = null, gain = null, buf = null, src = null, playing = false, startedAt = 0, offset = 0, curRate = 1, decoding = false;
+      var ac = null, gain = null, buf = null, src = null, playing = false, startedAt = 0, offset = 0, curRate = 1, decoding = false, duck = 1;
       function b64ToBuf(b64) { var bin = atob(b64.replace(/^data:[^,]*,/, '')), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
       function decode() {
         if (!ac || decoding) return; decoding = true;
@@ -41,9 +41,9 @@
         if (!buf) decode();
       }
       function play(rate) {
-        if (!cfg.on || !ac || !buf || ac.state !== 'running' || playing) return;
+        if (!cfg.on || !ac || !buf || ac.state !== 'running' || playing || duck <= 0) return;
         src = ac.createBufferSource(); src.buffer = buf; src.loop = true; src.playbackRate.value = rate; src.connect(gain);
-        var now = ac.currentTime; gain.gain.cancelScheduledValues(now); gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(cfg.vol, now + 0.006);
+        var now = ac.currentTime; gain.gain.cancelScheduledValues(now); gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(cfg.vol * duck, now + 0.006);
         src.start(now, (offset % buf.duration + buf.duration) % buf.duration); startedAt = now; curRate = rate; playing = true;
       }
       function pause() {
@@ -59,7 +59,7 @@
         play: play, pause: pause, unlock: unlock, get cfg() { return cfg; },
         set: function (c) { cfg = Object.assign(cfg, c); lsSet('pusheen.voice', cfg); },
         setSound: function (dataUrl) { custom = dataUrl; buf = null; if (dataUrl) { if (!lsSet0('pusheen.voice.sound', dataUrl)) toast('That sound is too big to keep after reload, but it works for now.'); } else { try { localStorage.removeItem('pusheen.voice.sound'); } catch (e) {} } offset = 0; decode(); },
-        get custom() { return !!custom; },
+        get custom() { return !!custom; }, setDuck: function (f) { duck = f; if (f <= 0) pause(); },
         get debug() { return (ac ? ac.state : 'none') + (buf ? ' ready ' + buf.duration.toFixed(3) + 's' : ' no-buffer') + (playing ? ' playing' : ''); }
       };
       function lsSet0(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
@@ -69,10 +69,12 @@
     var queue = [], cur = null, holdT = 0, showing = false;
     var SPEED = { sad: 21, dismissive: 25, calm: 30, kind: 33, delighted: 34, grumpy: 37 };
     var PITCH = { sad: 0.86, dismissive: 0.94, calm: 1, kind: 1.08, delighted: 1.12, grumpy: 1.04 };
-    function speak(text, mood, cut) {
+    function speak(text, mood, cut, parts) {
       // a reaction (she got poked, swung...) interrupts whatever she was saying
       if (cut) { queue = [{ text: text, mood: mood || 'calm' }]; VOICE.pause(); cur = null; nextLine(); return; }
-      queue.push({ text: text, mood: mood || 'calm' }); if (queue.length > 3) queue.splice(0, queue.length - 3);
+      queue.push({ text: text, mood: mood || 'calm', part: parts > 1 });
+      // keep every piece of a long answer; only older one-liners get dropped when too much piles up
+      while (queue.length > 3 + queue.filter(function (q) { return q.part; }).length) { var drop = queue.findIndex(function (q) { return !q.part; }); if (drop < 0) break; queue.splice(drop, 1); }
       if (!cur) nextLine();
     }
     function nextLine() {
@@ -91,7 +93,7 @@
         if (i >= chars.length) {
           VOICE.pause();
           var plain = typed.length;
-          holdT = setTimeout(nextLine, queue.length ? 900 : 2200 + plain * 45);
+          holdT = setTimeout(nextLine, queue.length ? (line.part ? 1300 + plain * 18 : 900) : 2200 + plain * 45);
           return;
         }
         var ch = chars[i++];
@@ -163,6 +165,62 @@
       var ph = photo; input.value = ''; clearPhoto(); BRAIN.hear(v, ph);
     });
     input.addEventListener('focus', function () { closeQuick(); BODY.nudge(); });
+    // ---------- hold the mic and talk to her ----------
+    var MIC = { on: false, text: '', d: null, rec: null, kind: null };
+    (function () {
+      var mic = $('micBtn'), an = BRAIN.android(), lang = JA ? 'ja-JP' : (navigator.language || 'en-US');
+      var WSR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (an && an.listen) MIC.kind = 'android'; else if (WSR) MIC.kind = 'web';
+      if (window.claude && claude.use) claude.use('dictation').then(function (d) { if (d && !MIC.kind) { MIC.d = d; MIC.kind = 'claude'; mic.hidden = false;
+        d.onPartial(function (r) { if (MIC.on) input.value = MIC.text + r.text; }); d.onFinal(function (r) { MIC.text += r.text + ' '; input.value = MIC.text; }); } }).catch(function () {});
+      mic.hidden = !MIC.kind;
+      window.pusheenHeard = function (text, done, err) {
+        if (err === 'permission') { toast('Allow the microphone, then hold the button again.'); stopUI(); return; }
+        if (err && !MIC.text && !text) { if (MIC.on) toast('I didn\'t catch that.'); stopUI(); return; }
+        if (text) input.value = text;
+        if (done) { MIC.text = text || input.value; finish(); }
+      };
+      function startUI() { MIC.on = true; MIC.text = ''; input.value = ''; mic.classList.add('listening'); input.placeholder = tr('Listening…'); BODY.perform(['tilt_left']); BODY.wake(); }
+      function stopUI() { MIC.on = false; mic.classList.remove('listening'); input.placeholder = tr('Say something…'); }
+      function finish() { var t = (input.value || MIC.text || '').trim(); stopUI(); if (t) form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit')); }
+      mic.addEventListener('pointerdown', function (e) {
+        e.preventDefault(); if (MIC.on) return; closeQuick();
+        if (MIC.kind === 'claude' && MIC.d) { MIC.d.start().catch(function (er) { stopUI(); if (er && er.code === 'not_granted') { mic.hidden = true; } }); startUI(); return; }
+        startUI();
+        if (MIC.kind === 'android') { try { an.listen(lang); } catch (x) { stopUI(); } }
+        else if (MIC.kind === 'web') {
+          try { var r = MIC.rec = new WSR(); r.lang = lang; r.interimResults = true; r.continuous = true;
+            r.onresult = function (ev) { var fin = '', part = ''; for (var i = 0; i < ev.results.length; i++) (ev.results[i].isFinal ? (fin += ev.results[i][0].transcript) : (part += ev.results[i][0].transcript)); MIC.text = fin; input.value = fin + part; };
+            r.onerror = function () { stopUI(); }; r.onend = function () { if (MIC.on) finish(); }; r.start(); } catch (x) { stopUI(); }
+        }
+      });
+      function release() {
+        if (!MIC.on) return;
+        if (MIC.kind === 'android') { try { an.stopListen(); } catch (x) {} setTimeout(function () { if (MIC.on) finish(); }, 2500); }
+        else if (MIC.kind === 'web' && MIC.rec) { try { MIC.rec.stop(); } catch (x) { finish(); } }
+        else if (MIC.kind === 'claude' && MIC.d) MIC.d.stop().then(finish, finish);
+      }
+      mic.addEventListener('pointerup', release); mic.addEventListener('pointercancel', release); mic.addEventListener('pointerleave', function () { if (MIC.on) release(); });
+    })();
+    window.pusheenPerm = function () { if (sheetKind === 'settings' && !sheet.hidden) render(); BRAIN.refreshSenses && BRAIN.refreshSenses(); };
+    // ---------- her face and last words on your home screen (phone app widget) ----------
+    var widgetT = 0, widgetLast = '';
+    function pushWidget() {
+      var an = BRAIN.android(); if (!an || !an.setWidget) return;
+      var L = BRAIN.state.log.filter(function (l) { return l.who === 's'; }).pop(), text = L ? L.text.slice(0, 120) : '…';
+      var tm = BRAIN.feelings().mood, face = BODY.state === 'asleep' ? 'sleep' : { delighted: 'happy', kind: 'content', grumpy: 'fedUp', sad: 'lookDown', dismissive: 'lookLeft' }[tm] || 'main';
+      var key = face + '|' + text; if (key === widgetLast) return; widgetLast = key;
+      var im = new Image();
+      im.onload = function () {
+        var c = document.createElement('canvas'); c.width = c.height = 220; var g = c.getContext('2d');
+        g.fillStyle = '#fde3eb'; g.beginPath(); g.arc(110, 110, 104, 0, Math.PI * 2); g.fill();
+        var sc = Math.min(200 / im.width, 200 / im.height); g.drawImage(im, 110 - im.width * sc / 2, 112 - im.height * sc / 2, im.width * sc, im.height * sc);
+        try { an.setWidget(c.toDataURL('image/png'), text); } catch (e) {}
+      };
+      im.src = SRC['face_' + face] || SRC.face_main;
+    }
+    function widgetSoon() { clearTimeout(widgetT); widgetT = setTimeout(pushWidget, 2500); }
+    document.addEventListener('visibilitychange', function () { if (document.hidden) pushWidget(); });
     function closeQuick() { quick.hidden = true; $('plusBtn').setAttribute('aria-expanded', 'false'); }
     $('plusBtn').addEventListener('click', function () { var o = quick.hidden; quick.hidden = !o; this.setAttribute('aria-expanded', String(o)); });
     quick.addEventListener('click', function (e) {
@@ -250,8 +308,9 @@
     });
 
     // ---------- sheets ----------
-    var TITLES = { log: 'What we said', missions: 'Missions', shop: 'Shop', notebook: 'Her notebook', settings: 'Settings', games: 'Games' };
+    var TITLES = { log: 'What we said', missions: 'Missions', shop: 'Shop', notebook: 'Her notebook', settings: 'Settings', games: 'Games', mail: 'Mail' };
     function openSheet(kind) {
+      if (sheetKind !== kind) sbody.scrollTop = 0;
       sheetKind = kind; sheet.hidden = false; stitle.textContent = tr(TITLES[kind]);
       render();
       if (kind === 'log') sbody.scrollTop = sbody.scrollHeight;
@@ -264,7 +323,7 @@
     function render() {
       if (!sheetKind) return;
       var keep = sbody.scrollTop; sbody.textContent = '';
-      ({ log: renderLog, missions: renderMissions, shop: renderShop, notebook: renderNotebook, settings: renderSettings, games: renderGames })[sheetKind]();
+      ({ log: renderLog, missions: renderMissions, shop: renderShop, notebook: renderNotebook, settings: renderSettings, games: renderGames, mail: renderMail })[sheetKind]();
       translateDom(sbody);
       if (sheetKind !== 'log') sbody.scrollTop = keep;
     }
@@ -275,7 +334,9 @@
       L.forEach(function (l) {
         var li = el('li', l.who === 'p' ? 'me' : l.who === 's' ? 'her' + (l.letter ? ' letter' : '') : 'sys');
         if (l.who !== 'n') li.appendChild(el('b', null, (l.who === 'p' ? (BRAIN.state.name || tr('You')) : 'Pusheen') + (l.letter ? tr(' (left you a note)') : '') + ':'));
-        li.appendChild(document.createTextNode(l.text)); li.appendChild(el('time', null, hm(l.at)));
+        li.appendChild(document.createTextNode(l.text));
+        if (l.photo && typeof MIND !== 'undefined') { var src = MIND.albumImg(l.photo); if (src) { var im0 = el('img', 'lp'); im0.src = src; im0.alt = ''; im0.onclick = function () { showPolaroid(src, l.text); }; li.appendChild(im0); } }
+        li.appendChild(el('time', null, hm(l.at)));
         ul.appendChild(li);
       });
       sbody.appendChild(ul);
@@ -360,11 +421,18 @@
           : S.day.reason ? (S.day.revealed ? ', because ' + S.day.reason + '.' : '. There\'s a reason. She hasn\'t said.') : ', for no reason at all.'));
         sbody.appendChild(md);
       }
+      if (typeof MIND !== 'undefined') renderMindBits();
       var imp = el('div', 'imp');
       imp.appendChild(el('span', 'lbl', 'How she sees you'));
       imp.appendChild(el('strong', null, S.impression ? S.impression.label : 'She hasn\'t decided yet.'));
       if (S.impression && S.impression.note) imp.appendChild(el('p', null, S.impression.note));
       sbody.appendChild(imp);
+      // her diary
+      var dia = BRAIN.diary();
+      sbody.appendChild(el('h3', null, tr('Her diary') + (dia.length ? ' (' + dia.length + ')' : '')));
+      if (!BRAIN.diaryOpen()) sbody.appendChild(el('p', 'empty', tr(dia.length ? 'She keeps it closed. Maybe when she trusts you more.' : 'She writes in it at night.')));
+      else if (!dia.length) sbody.appendChild(el('p', 'empty', tr('She writes in it at night.')));
+      else { var dl2 = el('ul', 'mem diary'); dia.slice(0, 14).forEach(function (d) { var li = el('li'); li.appendChild(el('time', null, new Date(d.day + 'T12:00:00').toLocaleDateString(JA ? 'ja-JP' : undefined, { weekday: 'short', day: 'numeric', month: 'short' }))); li.appendChild(el('span', null, d.text)); dl2.appendChild(li); }); sbody.appendChild(dl2); }
       sbody.appendChild(el('h3', null, (JA ? '思い出' : 'Souvenirs') + ' (' + S.mem.length + ')'));
       if (!S.mem.length) sbody.appendChild(el('p', 'empty', 'Nothing yet. She decides what is worth keeping.'));
       var ul = el('ul', 'mem');
@@ -376,15 +444,142 @@
       sbody.appendChild(el('p', 'foot', JA ? 'ノートがいっぱいになると書き直します：まとめて、忘れて、大事なことだけ残す。保存先：' + (BRAIN.storage() === 'claude' ? 'あなたのClaudeアカウント（非公開）とこの端末。' : 'この端末。')
         : 'When the notebook gets full she rewrites it: merges, forgets, keeps what matters. Saved ' + (BRAIN.storage() === 'claude' ? 'privately in your Claude account, and on this device.' : 'on this device.')));
     }
+    // ---------- she holds something out: take it or not ----------
+    var OFFER_UI = { hug: ['🤗', 'Hug her', 'She holds out her arms'], highfive: ['🙌', 'High five', 'She holds up her hand'], pat: ['✋', 'Pat her head', 'She tilts her head toward you'],
+                     hand: ['🤝', 'Take her hand', 'She holds out her hand'], pinky: ['🤙', 'Pinky promise', 'She holds out her little finger'], play: ['✿', 'Play', 'She wants to play'] };
+    function showOffer(d) {
+      var box = $('offer');
+      if (!d) { box.hidden = true; return; }
+      var o = OFFER_UI[d.kind]; if (!o) return;
+      var gd = d.kind === 'play' && DUO.list.filter(function (x) { return x.id === d.game; })[0];
+      $('offerTxt').textContent = tr(o[2]) + (gd ? ': ' + tr(gd.name) : ''); $('offerYes').textContent = o[0] + ' ' + tr(o[1]); $('offerNo').textContent = tr('Not now');
+      box.hidden = false; buzzOnce();
+    }
+    function buzzOnce() { try { navigator.vibrate && navigator.vibrate(30); } catch (e) {} }
+    $('offerYes').onclick = function () { $('offer').hidden = true; BRAIN.answerOffer(true); };
+    $('offerNo').onclick = function () { $('offer').hidden = true; BRAIN.answerOffer(false); };
+
     // ---------- little games ----------
     var GICON = { read: ['✎', 'var(--butter)'], math: ['±', 'var(--pink)'], pattern: ['▦', 'var(--mint)'], arrows: ['⇄', 'var(--sky)'], grid: ['#', 'var(--lav)'], echo: ['◉', 'var(--coral)'] };
     var gameHost = null, gameRun = null;
     function durLabel(sec) { return sec < 60 ? sec + (JA ? '秒' : ' s') : (sec / 60) + (JA ? '分' : ' min'); }
     function statSpan(num, label) { var sp = el('span'), tl = tr(label); if (JA && tl.indexOf('{n}') >= 0) { var parts = tl.split('{n}'); sp.appendChild(document.createTextNode(parts[0])); sp.appendChild(el('b', null, String(num))); sp.appendChild(document.createTextNode(parts[1])); return sp; } if (JA) { sp.appendChild(document.createTextNode(tr(label) + ' ')); sp.appendChild(el('b', null, String(num))); } else { sp.appendChild(el('b', null, String(num))); sp.appendChild(document.createTextNode(' ' + label)); } return sp; }
+    // ---------- her savings, what she noticed, her photos (in the notebook) ----------
+    function renderMindBits() {
+      var gi = MIND.goal(), pts = BRAIN.state.points;
+      if (gi) {
+        var gc = el('div', 'goalcard'); gc.appendChild(el('span', 'lbl', 'Saving up for'));
+        gc.appendChild(el('div', 'gn', gi.name)); gc.appendChild(el('p', 'soft', gi.why));
+        var mt = el('div', 'gmeter'), mf = el('div'); mf.style.width = Math.round(100 * gi.saved / gi.price) + '%'; mt.appendChild(mf); gc.appendChild(mt);
+        var r2 = el('div', 'row2'); r2.appendChild(el('b', null, '✦ ' + gi.saved + ' / ' + gi.price));
+        [5, 10, 25].forEach(function (n) { var b = el('button', 'btn small', fillT('Give ✦ {p}', { p: n })); b.disabled = pts < n; b.onclick = function () { if (MIND.helpGoal(n)) { toast('Thank you.'); render(); } }; r2.appendChild(b); });
+        gc.appendChild(r2); gc.appendChild(el('small', 'soft', 'She saves a little from every mission you finish and every game you play. You can chip in.'));
+        sbody.appendChild(gc);
+      }
+      var mine = MIND.goals().filter(function (g) { return g.owned; });
+      if (mine.length) sbody.appendChild(el('p', 'soft', tr('Bought with her own savings: ') + mine.map(function (g) { return g.name; }).join(', ')));
+      var hb = MIND.habits();
+      if (hb.length) { sbody.appendChild(el('h3', null, 'What she noticed about you')); var ul = el('ul', 'mem habits'); hb.forEach(function (h) { ul.appendChild(el('li', null, h)); }); sbody.appendChild(ul); }
+      var cat = MIND.cat(); if (cat && cat.fed) sbody.appendChild(el('p', 'soft', (cat.name ? cat.name : tr('The stray cat')) + ' · ' + fillT('fed {n} times', { n: cat.fed })));
+      var al = MIND.album();
+      if (al.length) { sbody.appendChild(el('h3', null, tr('Her photos') + ' (' + al.length + ')')); sbody.appendChild(thumbs(al)); }
+      var wl = MIND.wall();
+      if (wl.length) { sbody.appendChild(el('h3', null, tr('On her wall') + ' (' + wl.length + ')')); sbody.appendChild(thumbs(wl)); }
+    }
+    function thumbs(list) {
+      var g = el('div', 'thumbs');
+      list.forEach(function (p) { var b = el('button'), im = el('img'); im.src = p.img; im.alt = p.cap || ''; b.appendChild(im); b.onclick = function () { showPolaroid(p.img, p.cap || ''); }; g.appendChild(b); });
+      return g;
+    }
+    var polT = 0;
+    function showPolaroid(src, cap) {
+      var pd = $('polaroid'); $('polImg').src = src; $('polCap').textContent = String(cap || '').replace(/\s*‖\s*/g, ' '); pd.hidden = false;
+      clearTimeout(polT); polT = setTimeout(function () { pd.hidden = true; }, 8000);
+    }
+    $('polaroid').addEventListener('click', function () { $('polaroid').hidden = true; });
+    // ---------- mail: her letters, postcards from your trips, and yours ----------
+    function renderMail() {
+      var form = el('form', 'letter'), ta = el('textarea'); ta.placeholder = tr('Dear Pusheen,'); ta.maxLength = 3000;
+      form.appendChild(field('Write to her', ta, 'She answers by letter, about a day later.'));
+      var send = el('button', 'btn pinky wide', tr('Send the letter')); form.appendChild(send);
+      form.onsubmit = function (e) { e.preventDefault(); if (MIND.writeLetter(ta.value)) { ta.value = ''; toast('Sent.'); render(); } else toast('Write a little more.'); };
+      sbody.appendChild(form);
+      var list = MIND.mail();
+      if (!list.length) sbody.appendChild(el('p', 'empty', 'The mailbox is empty.'));
+      list.forEach(function (m) {
+        var card = el('div', 'mailitem ' + m.kind + (m.read ? '' : ' unread')), mh = el('div', 'mh');
+        mh.appendChild(el('b', null, m.kind === 'mine' ? tr('You → Pusheen') : m.kind === 'letter' ? tr('Pusheen → you') : fillT('Postcard from {city}', { city: m.city })));
+        mh.appendChild(el('span', null, new Date(m.kind === 'mine' ? m.at : m.deliver).toLocaleDateString(JA ? 'ja-JP' : undefined, { day: 'numeric', month: 'short' })));
+        card.appendChild(mh);
+        if (m.kind === 'postcard') { var cv = document.createElement('canvas'); cv.width = 640; cv.height = 410; drawPostcard(cv, m); card.appendChild(cv); }
+        card.appendChild(el('p', 'mt', m.text || '…'));
+        sbody.appendChild(card);
+        if (!m.read) MIND.readMail(m.id, true);
+      });
+      updateMailBadge();
+    }
+    function drawPostcard(cv, m) {
+      var g = cv.getContext('2d'), W = cv.width, H = cv.height, ink = '#5b4944', R0 = function (n) { var x = Math.sin(n * 999 + m.city.length) * 1e4; return x - Math.floor(x); };
+      g.fillStyle = '#fffaf0'; g.fillRect(0, 0, W, H);
+      var sky = g.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, '#c4e5f5'); sky.addColorStop(1, '#fde3eb'); g.fillStyle = sky; g.fillRect(18, 18, W - 36, H - 36);
+      g.lineJoin = 'round'; g.lineCap = 'round'; g.lineWidth = 5; g.strokeStyle = ink;
+      var mo = m.motif, base = H - 110;
+      g.beginPath();
+      if (mo === 'mountain') { g.moveTo(40, base); g.lineTo(230, 110); g.lineTo(420, base); g.closePath(); g.fillStyle = '#aebbe1'; g.fill(); g.stroke(); g.beginPath(); g.moveTo(185, 160); g.lineTo(230, 110); g.lineTo(275, 160); g.lineTo(250, 150); g.lineTo(230, 170); g.lineTo(210, 150); g.closePath(); g.fillStyle = '#fff'; g.fill(); g.stroke(); }
+      else if (mo === 'sea') { for (var k = 0; k < 4; k++) { g.beginPath(); for (var x = 30; x < W - 30; x += 40) g.quadraticCurveTo(x + 10, base - 60 + k * 26 - 18, x + 20, base - 60 + k * 26); g.stroke(); } g.beginPath(); g.arc(W - 150, 120, 46, 0, 7); g.fillStyle = '#ffe08a'; g.fill(); g.stroke(); }
+      else if (mo === 'tower') { g.moveTo(W / 2 - 70, base); g.lineTo(W / 2 - 14, 90); g.lineTo(W / 2 + 14, 90); g.lineTo(W / 2 + 70, base); g.closePath(); g.fillStyle = '#f6c9a8'; g.fill(); g.stroke(); for (var y = 130; y < base; y += 40) { g.beginPath(); g.moveTo(W / 2 - 20 - (y - 90) * 0.18, y); g.lineTo(W / 2 + 20 + (y - 90) * 0.18, y); g.stroke(); } }
+      else if (mo === 'bridge') { g.moveTo(30, base - 40); g.quadraticCurveTo(W / 2, base - 210, W - 30, base - 40); g.stroke(); g.beginPath(); g.rect(30, base - 50, W - 60, 20); g.fillStyle = '#ee8a63'; g.fill(); g.stroke(); for (var bx = 80; bx < W - 60; bx += 60) { g.beginPath(); g.moveTo(bx, base - 50); g.lineTo(bx, base - 50 - Math.sin((bx - 30) / (W - 60) * Math.PI) * 140); g.stroke(); } }
+      else if (mo === 'temple') { g.moveTo(170, 160); g.lineTo(470, 160); g.lineTo(430, 120); g.lineTo(210, 120); g.closePath(); g.fillStyle = '#a0b1dd'; g.fill(); g.stroke(); g.beginPath(); g.rect(210, 160, 220, base - 160); g.fillStyle = '#fbeedd'; g.fill(); g.stroke(); g.beginPath(); g.rect(290, base - 90, 60, 90); g.fillStyle = '#d8ae86'; g.fill(); g.stroke(); }
+      else if (mo === 'castle') { g.rect(160, 150, 320, base - 150); g.fillStyle = '#e6dccd'; g.fill(); g.stroke(); for (var cx2 = 160; cx2 < 480; cx2 += 64) { g.beginPath(); g.rect(cx2, 120, 32, 30); g.fill(); g.stroke(); } g.beginPath(); g.arc(320, base, 40, Math.PI, 0); g.fillStyle = '#b98c66'; g.fill(); g.stroke(); }
+      else if (mo === 'bread') { g.ellipse(W / 2, base - 70, 170, 70, 0, 0, 7); g.fillStyle = '#e8b96a'; g.fill(); g.stroke(); for (var kk = -2; kk <= 2; kk++) { g.beginPath(); g.moveTo(W / 2 + kk * 56 - 20, base - 110); g.lineTo(W / 2 + kk * 56 + 20, base - 40); g.stroke(); } }
+      else { for (var f = 0; f < 6; f++) { var fx = 90 + f * 90, fy = base - 40 - R0(f) * 120; g.beginPath(); g.moveTo(fx, base); g.lineTo(fx, fy); g.stroke(); for (var pe = 0; pe < 5; pe++) { g.beginPath(); g.ellipse(fx + Math.cos(pe * 1.256) * 18, fy + Math.sin(pe * 1.256) * 18, 14, 9, pe * 1.256, 0, 7); g.fillStyle = ['#f8c4d3', '#ffe08a', '#d7c7f5'][f % 3]; g.fill(); g.stroke(); } } }
+      g.fillStyle = '#c3e3a6'; g.fillRect(18, base, W - 36, H - 18 - base); g.beginPath(); g.moveTo(18, base); g.lineTo(W - 18, base); g.stroke();
+      g.font = '40px "Mochiy Pop One", "M PLUS Rounded 1c", sans-serif'; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.lineWidth = 9; g.strokeStyle = '#fffaf0';
+      var title = fillT('Greetings from {city}', { city: m.city }); g.strokeText(title, 40, H - 44); g.fillStyle = ink; g.fillText(title, 40, H - 44);
+      g.save(); g.translate(W - 110, 40); g.rotate(0.06); g.fillStyle = '#fff'; g.strokeStyle = ink; g.lineWidth = 4; g.setLineDash([6, 5]); g.strokeRect(0, 0, 80, 96); g.setLineDash([]); g.fillRect(4, 4, 72, 88);
+      g.fillStyle = '#f39ab6'; g.beginPath(); g.moveTo(40, 72); g.bezierCurveTo(6, 48, 22, 18, 40, 38); g.bezierCurveTo(58, 18, 74, 48, 40, 72); g.fill(); g.restore();
+      g.strokeStyle = 'rgba(91,73,68,0.55)'; g.lineWidth = 3; g.beginPath(); g.arc(W - 150, 120, 44, 0, 7); g.stroke();
+      g.font = '700 14px Mali, sans-serif'; g.fillStyle = 'rgba(91,73,68,0.7)'; g.textAlign = 'center'; g.fillText(new Date(m.deliver).toLocaleDateString(JA ? 'ja-JP' : 'en-GB', { day: 'numeric', month: 'short' }), W - 150, 125);
+      g.strokeStyle = ink; g.lineWidth = 5; g.strokeRect(18, 18, W - 36, H - 36);
+    }
+    function updateMailBadge() { if (typeof MIND === 'undefined') return; var n = MIND.unread(), b = $('mailBadge'); b.hidden = !n; b.textContent = n; }
+    // ---------- studying together ----------
+    function updateFocus() {
+      if (typeof MIND === 'undefined') return;
+      var f = MIND.focus(), ch = $('focusChip');
+      ch.hidden = !f; if (!f) return;
+      var s0 = Math.ceil(f.left / 1000); $('focusTxt').textContent = Math.floor(s0 / 60) + ':' + (s0 % 60 < 10 ? '0' : '') + (s0 % 60);
+    }
+    $('focusStop').addEventListener('click', function () { if (typeof MIND !== 'undefined') MIND.stopFocus(); updateFocus(); });
+    function renderFocusCard() {
+      var c = el('div', 'gcard read'), h = el('h4'), ic = el('span', 'gi', '📖'); ic.style.background = 'var(--mint)';
+      h.appendChild(ic); h.appendChild(el('span', null, tr('Study with her'))); c.appendChild(h);
+      c.appendChild(el('p', null, tr('A focus timer. She studies at her desk with you, and notices if you sneak off to other apps.')));
+      var f = MIND.focus(), d = el('div', 'gdurs');
+      if (f) { var stop = el('button', 'btn', tr('Stop')); stop.onclick = function () { MIND.stopFocus(); render(); }; d.appendChild(el('b', null, fillT('{n} min left', { n: Math.ceil(f.left / 60000) }))); d.appendChild(stop); }
+      else [15, 25, 45, 60].forEach(function (m2, k) { var b = el('button', 'btn' + (k === 1 ? ' pinky' : ''), m2 + (JA ? '分' : ' min')); b.onclick = function () { MIND.startFocus(m2); closeSheet(); updateFocus(); }; d.appendChild(b); });
+      c.appendChild(d); sbody.appendChild(c);
+    }
     function renderGames() {
+      if (typeof MIND !== 'undefined') renderFocusCard();
       var gt = BRAIN.games.today(), cap = BRAIN.games.cap, info = BRAIN.study.info();
       var head = el('div', 'ptsline'); head.appendChild(el('span', null, '✦')); head.appendChild(el('strong', null, gt.pts + ' / ' + cap)); head.appendChild(el('span', null, ' ' + tr('Points from games today')));
       sbody.appendChild(head);
+      // games against her
+      sbody.appendChild(el('h3', null, tr('Play with her')));
+      var stats = BRAIN.duo.stats(), dl = el('div', 'duolist');
+      DUO.list.forEach(function (g) {
+        var c = el('div', 'gcard'), h = el('h4'), ic = el('span', 'gi', { janken: '✊', tictac: '◯', connect: '●', memory: '🍙', chain: 'あ' }[g.id] || '✦'); ic.style.background = 'var(--paper-2)';
+        h.appendChild(ic); h.appendChild(el('span', null, tr(g.name)));
+        var st = stats[g.id]; if (st) h.appendChild(el('span', 'grec', (JA ? '' : '') + st.w + '–' + st.l + (st.d ? '–' + st.d : '')));
+        c.appendChild(h); c.appendChild(el('p', null, tr(g.desc)));
+        var off = g.needsBrain && BRAIN.kind() === 'off';
+        if (off) c.appendChild(el('p', null, tr('Needs her brain (Settings).')));
+        var b = el('button', 'btn pinky small', tr('Play')); b.disabled = off; b.onclick = function () { startDuo(g); };
+        c.appendChild(b); dl.appendChild(c);
+      });
+      sbody.appendChild(dl);
+      sbody.appendChild(el('h3', null, tr('Games')));
       GAMES.list.forEach(function (g, i) {
         if (i === 1) sbody.appendChild(el('h3', null, tr('Other games')));
         var c = el('div', 'gcard' + (g.id === 'read' ? ' read' : ''));
@@ -412,6 +607,21 @@
         var d = el('div', 'gdurs');
         g.secs.forEach(function (sec, k) { var b = el('button', 'btn' + (k === (g.id === 'read' ? 1 : 1) ? ' pinky' : ''), durLabel(sec)); b.onclick = function () { startGame(g, sec); }; d.appendChild(b); });
         c.appendChild(d); sbody.appendChild(c);
+      });
+    }
+    function blip(text) {
+      var n = String(text || '').replace(/[^\p{L}\p{N}]/gu, '').length; if (!n || !VOICE.cfg.on) return;
+      VOICE.play(VOICE.cfg.pitch); setTimeout(function () { VOICE.pause(); }, Math.min(1400, 60 + n * 32));
+    }
+    function startDuo(g, fromHer) {
+      if (gameHost) return;
+      if (!fromHer) { var can = BRAIN.duo.can(g.id); if (!can.ok) { closeSheet(); if (can.line) BRAIN.sayNow(can.line, 'away'); return; } }
+      closeSheet(); closeQuick(); closeHold();
+      gameHost = el('div', 'game'); document.body.appendChild(gameHost);
+      gameRun = DUO.run(g, gameHost, {
+        mood: BRAIN.duo.mood, level: BRAIN.duo.level, face: function (n) { return SRC['face_' + n] || SRC.face_main; },
+        hasLine: BRAIN.duo.has, line: BRAIN.duo.line, blip: blip, reward: BRAIN.duo.reward, chain: BRAIN.duo.chain,
+        closed: function (id, result, pts, again) { if (gameHost) gameHost.remove(); gameHost = null; gameRun = null; updatePoints(); BRAIN.duo.done(id, result, pts, again); if (again) setTimeout(function () { startDuo(g, true); }, 50); }
       });
     }
     function startGame(g, sec) {
@@ -510,19 +720,72 @@
         sbody.appendChild(sb);
         sbody.appendChild(el('p', 'foot', 'Android calls this "usage access". She only sees how long each app was open today. She may give you screen-time missions.'));
       }
+      // her head over other apps (app version)
+      if (an && an.canOverlay && typeof MIND !== 'undefined') {
+        sbody.appendChild(el('h3', null, 'Floating head'));
+        var co = false; try { co = an.canOverlay(); } catch (e) {}
+        var ov = MIND.overlay(), op = el('p', 'status ' + (co && ov.on ? 'on' : 'off')); op.appendChild(el('i'));
+        op.appendChild(document.createTextNode(tr(co ? 'She can float over other apps.' : 'She can peek out over other apps when you have been scrolling one for too long.'))); sbody.appendChild(op);
+        if (!co) { var ob = el('button', 'btn pinky', 'Let her float over other apps'); ob.onclick = function () { try { an.openOverlay(); } catch (e) {} }; sbody.appendChild(ob); }
+        var osel = el('select'); [[0, tr('Off')], [20, '20' + (JA ? '分' : ' min')], [30, '30' + (JA ? '分' : ' min')], [45, '45' + (JA ? '分' : ' min')], [60, '60' + (JA ? '分' : ' min')]].forEach(function (o) { var x = el('option', null, o[1]); x.value = o[0]; osel.appendChild(x); });
+        osel.value = ov.on ? String(ov.min) : '0';
+        osel.onchange = function () { var v = +osel.value; MIND.setOverlay(v ? { on: true, min: v } : { on: false }); if (v && !co) try { an.openOverlay(); } catch (e) {} render(); };
+        sbody.appendChild(field('Peek after', osel, 'Only for scrolling apps (social media, videos, games). It also needs screen-time access.'));
+      }
       // where you are
       sbody.appendChild(el('h3', null, 'Where you are'));
       var P = BRAIN.place(), W = BRAIN.weather();
       var lp = el('p', 'status ' + (P && P.city ? 'on' : 'off')); lp.appendChild(el('i'));
-      lp.appendChild(document.createTextNode(P && P.city ? (JA ? 'いる場所：' : 'She knows you\'re in ') + P.city + (P.country ? ', ' + P.country : '') + (W ? ' (' + W.temp + '°' + (JA ? '' : ', ' + W.desc) + ')' : '') + (JA ? '' : '.') : 'She doesn\'t know where you are.'));
+      var addr = P && P.city ? [BRAIN.placeNow() ? '★ ' + BRAIN.placeNow() : '', P.street, P.spot, P.area, P.city + (P.country ? ', ' + P.country : '')].filter(Boolean).join(', ') : '';
+      lp.appendChild(document.createTextNode(P && P.city ? (JA ? 'いる場所：' : 'She knows you\'re at: ') + addr + (W ? ' (' + W.temp + '°' + (JA ? '' : ', ' + W.desc) + ')' : '') : 'She doesn\'t know where you are.'));
       sbody.appendChild(lp);
+      // naming the place you're at
+      if (P && P.lat != null && !P.manual) {
+        var nameRow = el('div', 'mrow');
+        [['home', '🏠', 'Home'], ['school', '🏫', 'School'], ['work', '💼', 'Work'], ['gym', '🏃', 'Gym']].forEach(function (k) {
+          var b = el('button', 'btn small', k[1] + ' ' + tr(k[2])); b.type = 'button'; b.onclick = function () { if (BRAIN.addPlace(tr(k[2]), k[0])) { toast(fillT('Saved: {x}', { x: tr(k[2]) })); render(); } }; nameRow.appendChild(b);
+        });
+        var other = el('input'); other.placeholder = tr('Another name'); other.maxLength = 30; other.style.maxWidth = '150px';
+        var ob = el('button', 'btn small', '＋'); ob.type = 'button'; ob.onclick = function () { if (other.value.trim() && BRAIN.addPlace(other.value.trim(), 'other')) { toast(fillT('Saved: {x}', { x: other.value.trim() })); render(); } };
+        nameRow.appendChild(other); nameRow.appendChild(ob);
+        sbody.appendChild(field('Name the place you are at now', nameRow, 'She will know when you are there, when you arrive and when you leave.'));
+      }
+      var PL = BRAIN.places();
+      if (PL.length) {
+        var pul = el('ul', 'plist');
+        PL.forEach(function (pl) { var li = el('li'); li.appendChild(el('span', 'ic', { home: '🏠', school: '🏫', work: '💼', gym: '🏃' }[pl.kind] || '📍')); li.appendChild(el('span', 'nm', pl.name)); var x = el('button', 'btn small', '✕'); x.type = 'button'; x.setAttribute('aria-label', tr('Forget this place')); x.onclick = function () { BRAIN.removePlace(pl.id); render(); }; li.appendChild(x); pul.appendChild(li); });
+        sbody.appendChild(pul);
+      }
+      var anL = BRAIN.android();
+      if (anL && anL.hasPerm) {
+        var bgOk = anL.hasPerm('bgLocation');
+        var bgp = el('p', 'status ' + (bgOk ? 'on' : 'off')); bgp.appendChild(el('i')); bgp.appendChild(document.createTextNode(tr(bgOk ? 'She notices arrivals even when the app is closed.' : 'She only knows where you are while the app is open.'))); sbody.appendChild(bgp);
+        if (!bgOk) { var bgb = el('button', 'btn', tr('Let her notice arrivals in the background')); bgb.type = 'button'; bgb.onclick = function () { anL.askPerm('bgLocation'); }; sbody.appendChild(bgb);
+          sbody.appendChild(el('p', 'foot', 'Android shows this as location "Allow all the time". It is only used for the places you named.')); }
+      }
       if (navigator.geolocation) {
         var ls = el('label', 'switch'); ls.appendChild(el('span', null, 'Use my location')); var lo = el('input'); lo.type = 'checkbox'; lo.checked = BRAIN.locOn();
         lo.onchange = function () { BRAIN.setLocation(lo.checked).then(function () { render(); }); }; ls.appendChild(lo); sbody.appendChild(ls);
       }
       var city = el('input'); city.placeholder = 'Or type your city'; city.value = P && P.manual ? P.city : ''; city.maxLength = 40;
       city.onchange = function () { BRAIN.setCity(city.value); };
-      sbody.appendChild(field('City', city, 'Only the city name is kept. Your position is used to look up the city and the weather (BigDataCloud, Open-Meteo), and is never saved. Weather works in the app version.'));
+      sbody.appendChild(field('City', city, 'Your exact position stays on this device (and in your save code). Her brain only gets the street, the area and your named places, never the coordinates. Addresses come from OpenStreetMap, weather from Open-Meteo; both work in the app version.'));
+      // her senses (phone app)
+      var anS = BRAIN.android();
+      if (anS && anS.hasPerm) {
+        sbody.appendChild(el('h3', null, 'Her senses'));
+        var musicOn = false, usageOn = false; try { musicOn = anS.hasMusicAccess(); usageOn = anS.hasUsageAccess(); } catch (e) {}
+        [['activity', 'Steps', 'She counts your steps and ticks off walking missions herself.', anS.hasPerm('activity') && anS.hasPerm('steps')],
+         ['calendar', 'Calendar', 'She sees your events (titles and times), wishes you luck and asks how it went.', anS.hasPerm('calendar')],
+         ['mic', 'Microphone', 'Hold the mic button to talk to her out loud. She only listens while you hold it.', anS.hasPerm('mic')],
+         ['music', 'Unread notifications', 'Uses the same access as your music: she counts unread notifications per app, never what they say.', musicOn],
+         ['usage', 'Real sleep', 'Uses screen-time access: from when your screen went dark at night, she knows when you actually slept.', usageOn]].forEach(function (r) {
+          var row = el('div', 'sense'), st = el('p', 'status ' + (r[3] ? 'on' : 'off')); st.appendChild(el('i')); var tx = el('span'); tx.appendChild(el('b', null, tr(r[1]))); tx.appendChild(document.createTextNode(' — ' + tr(r[2]))); st.appendChild(tx); row.appendChild(st);
+          if (!r[3]) { var b = el('button', 'btn small', tr('Allow')); b.type = 'button'; b.onclick = function () { if (r[0] === 'music') anS.openMusicAccess(); else if (r[0] === 'usage') anS.openUsageAccess(); else anS.askPerm(r[0]); }; row.appendChild(b); }
+          sbody.appendChild(row);
+        });
+        sbody.appendChild(el('p', 'foot', 'Battery, headphones and phone calls need no permission: she gets sleepy on low battery, talks softly with headphones in, and goes quiet during calls. Add the "Pusheen" widget from your home screen to keep her there.'));
+      }
       // save code
       sbody.appendChild(el('h3', null, 'Save code'));
       sbody.appendChild(el('p', 'foot', 'A code that holds everything: her memories, opinion of you, missions, points, house and furniture. Keep it somewhere safe, or paste it into the other version of Pusheen (Claude ↔ app) to carry her over. Your API key is not in it.'));
@@ -552,8 +815,11 @@
 
     // ---------- wiring ----------
     BRAIN.on(function (type, d) {
-      if (type === 'say') { speak(d.text, d.mood, d.cut); $('hint').classList.add('gone'); }
+      if (type === 'say') { speak(d.text, d.mood, d.cut, d.parts); $('hint').classList.add('gone'); widgetSoon(); }
+      else if (type === 'senses') { var sn = BRAIN.senses(); VOICE.setDuck(sn.call ? 0 : sn.phones ? 0.5 : 1); }
       else if (type === 'heard') echo(d.text, d.photo);
+      else if (type === 'offer') showOffer(d);
+      else if (type === 'duo') { var dg = DUO.list.filter(function (x) { return x.id === d.id; })[0]; if (dg) startDuo(dg, true); }
       else if (type === 'thinking') thinking(d === true);
       else if (type === 'note') note(d.text);
       else if (type === 'log' && sheetKind === 'log') { render(); sbody.scrollTop = sbody.scrollHeight; }
@@ -570,6 +836,14 @@
       else if ((type === 'mem' || type === 'opinion') && sheetKind === 'notebook') render();
       else if (type === 'state') { updatePoints(); updateBadge(); updateHouse(); updateFeel(); updateMute(); }
     });
+    if (typeof MIND !== 'undefined') MIND.on(function (type, d) {
+      if (type === 'openMail') openSheet('mail');
+      else if (type === 'mail') { updateMailBadge(); if (sheetKind === 'mail') render(); }
+      else if (type === 'photo') showPolaroid(d.img, d.cap);
+      else if (type === 'focus') { updateFocus(); if (sheetKind === 'games') render(); }
+      else if (type === 'focusTick') updateFocus();
+      else if ((type === 'goal' || type === 'cat' || type === 'wall') && sheetKind === 'notebook') render();
+    });
     var busyCheck = function () { return document.activeElement === input || BRAIN.busy || !sheet.hidden || !!cur || !!gameHost; };
     BODY.setBusy(busyCheck); BRAIN.setBusyCheck(function () { return document.activeElement === input || !sheet.hidden || !!cur || !!gameHost; });
 
@@ -577,7 +851,7 @@
       start: function () {
         translateDom(document.body);
         updatePoints(); updateBadge(); updateClock(); updateHouse(); updateFeel(); updateMute();
-        setInterval(updateClock, 1000); setInterval(updateFeel, 1000);
+        setInterval(updateClock, 1000); setInterval(updateFeel, 1000); setTimeout(function () { updateMailBadge(); updateFocus(); }, 3000);
         document.addEventListener('visibilitychange', function () { if (!document.hidden && sheetKind === 'settings') render(); });
         requestAnimationFrame(placeSpeech);
         var hint = $('hint'); setTimeout(function () { hint.classList.add('gone'); }, 9000);
@@ -593,6 +867,6 @@
           return false;
         };
       },
-      updateClock: updateClock, openSheet: openSheet, speak: speak, voice: VOICE, startGame: startGame, tr: tr
+      updateClock: updateClock, openSheet: openSheet, speak: speak, voice: VOICE, startGame: startGame, startDuo: startDuo, tr: tr
     };
   })();

@@ -88,9 +88,19 @@
     shrug:  function (k, tt) { return [26, 112 + 6 * Math.sin(tt * 3)]; },
     clap:   function (k, tt) { return [12, -64 + 22 * Math.sin(tt * 14)]; },
     cover:  function () { return [14, -166]; },
-    dance:  function (k, tt) { var ph = k === 'L' ? 0 : Math.PI; return [30 + 30 * Math.sin(tt * 7.5 + ph), 60 + 45 * Math.sin(tt * 7.5 + ph + 0.6)]; }
+    dance:  function (k, tt) { var ph = k === 'L' ? 0 : Math.PI; return [30 + 30 * Math.sin(tt * 7.5 + ph), 60 + 45 * Math.sin(tt * 7.5 + ph + 0.6)]; },
+    // offering something and waiting for an answer
+    openArms: function (k, tt) { return [58 + 3 * Math.sin(tt * 2.2 + (k === 'L' ? 0 : 1)), 70 + 4 * Math.sin(tt * 2.2 + (k === 'L' ? 0.5 : 1.5))]; },
+    reach:  function (k, tt) { return k === 'R' ? [46 + 2 * Math.sin(tt * 2), 40] : POSES.down(k, tt); },
+    pinky:  function (k, tt) { return k === 'R' ? [118, 150 + 3 * Math.sin(tt * 3)] : POSES.down(k, tt); },
+    waitFive: function (k, tt) { return k === 'R' ? [138 + 2 * Math.sin(tt * 2.5), 158] : POSES.down(k, tt); },
+    // holding things during her own day
+    holdFront: function (k, tt) { return [4 + Math.sin(tt * 0.8 + (k === 'L' ? 0 : 1)) * 0.8, -42]; },
+    water:  function (k, tt) { return k === 'R' ? [52, 46 + 8 * Math.sin(tt * 1.6)] : POSES.down(k, tt); },
+    fan:    function (k, tt) { return k === 'R' ? [100, 150 + 16 * Math.sin(tt * 9)] : POSES.down(k, tt); },
+    umbrella: function (k, tt) { return k === 'R' ? [70, 168] : POSES.down(k, tt); }
   };
-  var FRONT = { crossFront: 1, clap: 1, cover: 1 };
+  var FRONT = { crossFront: 1, clap: 1, cover: 1, holdFront: 1 };
   var armPlan = { next: 4 }, headPlan = { next: 3 }, leanPlan = { next: 5 }, timers = [];
   function later(sec, fn) { timers.push({ at: t + sec, fn: fn }); }
   function setPose(k, pose) {
@@ -101,6 +111,8 @@
   function bothArms(pose) { setPose('L', pose); setPose('R', pose); }
   function planArms() {
     if (t < armPlan.next || grab || mood.state !== 'awake' || t < mood.flail || t < vibe.until) return;
+    var ap = activityPose();
+    if (ap) { if (ap === 'holdFront') { if (arms.L.pose !== ap) setPose('L', ap); if (arms.R.pose !== ap) setPose('R', ap); } else { if (arms.R.pose !== ap) setPose('R', ap); if (arms.L.pose !== 'down' && arms.L.pose !== 'swing') setPose('L', 'down'); } armPlan.next = t + 2; return; }
     var sulky = TEMPER.name === 'grumpy' || TEMPER.name === 'mad' || TEMPER.name === 'dismissive';
     var choice = pick([['stay', 38], ['swing', 16], ['crossFront', sulky ? 40 : 15], ['crossBack', 15], ['rub', 16]]);
     var dur = rnd(3.2, 6);
@@ -124,6 +136,7 @@
     if (wander.dir) { head.face = wander.dir < 0 ? 'lookLeft' : 'lookRight'; head.target = wander.dir * 0.05; head.shiftT = wander.dir * 5; head.shiftYT = 0; headPlan.next = t + rnd(1, 2); return; }
     if (headPlan.forceTilt && t < headPlan.forceTilt.until) { head.target = headPlan.forceTilt.side * 0.07; head.shiftT = 0; head.shiftYT = 0; return; }
     if (t < headPlan.next) return;
+    if (activityOn() && (activ.name === 'read' || activ.name === 'sketch') && Math.random() < 0.8) { head.face = 'lookDown'; head.target = 0; head.shiftT = 0; head.shiftYT = 8; headPlan.next = t + rnd(4, 9); return; }
     var tm = TEMPER.name;
     var away = tm === 'dismissive' ? 30 : 13;
     var c = pick([['still', 50], ['lookLeft', away], ['lookRight', away], ['lookDown', tm === 'sad' ? 45 : 12], ['tilt', 12],
@@ -195,7 +208,8 @@
     walk_left: [0.5, function () { var r = wanderRange(); wander.target = clamp(wander.x - 520, r[0], r[1]); wander.next = t + 12; }],
     walk_right: [0.5, function () { var r = wanderRange(); wander.target = clamp(wander.x + 520, r[0], r[1]); wander.next = t + 12; }],
     come_here: [0.5, function () { var r = wanderRange(), cs = view.k * cam.s; wander.target = clamp(-cam.x / cs, r[0], r[1]); wander.next = t + 12; }],
-    nap: [0.5, function () { setMood('asleep'); }]
+    nap: [0.5, function () { setMood('asleep'); }],
+    sneeze: [1.4, function () { anim.nod = { t0: t + 0.35, dur: 0.5 }; showFace('sleep', 0.5); later(0.35, function () { body.vy -= 260; body.sqv += 1.2; var p = headPt(V(800, 300)); word(['ハクション', 'くしゅん', 'Achoo!'], V(p.x + 70, p.y), { size: 50, dur: 1.2 }); emit('sneeze'); }); }]
   };
   function perform(list) {
     (Array.isArray(list) ? list : [list]).slice(0, 6).forEach(function (m) { if (MOVES[m]) moves.queue.push(m); });
@@ -214,8 +228,32 @@
   function word(list, at, opt) { fx.push({ kind: 'word', text: oneOf(list), x: at.x, y: at.y, t0: t, dur: (opt && opt.dur) || 1.15, tilt: rnd(-0.16, 0.16), size: (opt && opt.size) || 72, drift: (opt && opt.drift) || 0 }); }
   function mark(kind, dur) { fx.push({ kind: kind, t0: t, dur: dur, side: Math.random() < 0.5 ? -1 : 1 }); }
   function showFace(name, sec) { react = { face: name, until: t + sec }; }
+  // her rarest face: utter shock or fury, a few seconds at most
+  function shock(sec, kind) {
+    mood.shockUntil = t + clamp(sec || 4, 1, 5);
+    if (mood.state === 'asleep') setMood('awake');
+    body.vy -= 700; body.sqv -= 1.6; cam.shake = 0.35;
+    var p = headPt(V(820, 60)); word(kind === 'fury' ? ['ハァ!?', 'ムカッ'] : ['えっ!?', '!!'], V(p.x + 70, p.y), { size: 78, dur: 1.6 });
+    mark(kind === 'fury' ? 'vein' : 'sweat', clamp(sec || 4, 1, 5));
+  }
+  var offering = null;
+  function offerPose(kind) {
+    var pose = { hug: 'openArms', hand: 'reach', pinky: 'pinky', highfive: 'waitFive', pat: null }[kind];
+    offering = { kind: kind, pose: pose };
+    if (mood.state === 'asleep') setMood('awake');
+    if (pose === 'openArms') bothArms(pose); else if (pose) setPose('R', pose);
+    if (kind === 'pat') headPlan.forceTilt = { side: -1.2, until: t + 30 };
+    head.face = kind === 'hug' || kind === 'pat' ? 'content' : 'happy'; headPlan.next = t + 30; armPlan.next = t + 30;
+  }
+  function offerEnd() {
+    if (!offering) return;
+    if (offering.pose === 'openArms') bothArms('down'); else if (offering.pose) setPose('R', 'down');
+    if (offering.kind === 'pat') headPlan.forceTilt = null;
+    offering = null; armPlan.next = t + 2; headPlan.next = t + 1;
+  }
   function heldWild() { return grab && (Math.abs(wrap(body.a)) > 1.5 || Math.abs(body.va) > 3.2); }
   function faceName() {
+    if (t < (mood.shockUntil || 0) && IMG.face_shock) return 'shock';
     if (t < mood.flail) return 'boop';
     if (mood.state === 'fedUp') return 'fedUp';
     if (heldWild()) return 'boop';
@@ -240,14 +278,14 @@
     var p = headPt(V(820, 60)); word(WORDS.wake, V(p.x + 40, p.y)); body.sqv += 1.2; mood.lastTouch = t;
     emit('woke');
   }
-  function refuse(at) {
+  function refuse(at, kind, why) {
     mood.flail = t + 0.9; bothArms('flail');
     later(0.9, function () { if (mood.state === 'fedUp') bothArms('crossFront'); else bothArms('down'); });
     var away = at.x < bodyPt(COM).x ? 1 : -1;
     body.vx += away * 260; body.va += away * 2.2; cam.shake = 0.4;
     mark('vein', 1.2); word(WORDS.refuse, V(at.x, at.y - 90));
     if (mood.state === 'fedUp') mood.until += 1;
-    emit('refused');
+    emit('refused', { kind: kind, why: why || (mood.state === 'fedUp' ? 'fedUp' : null) });
   }
   function touchStart() {
     if (mood.state === 'fedUp') return false;
@@ -529,7 +567,7 @@
 
   // ---------- drawing her ----------
   var M = {};
-  function sprite(name, x, y) { ctx.drawImage(IMG[name], x, y); M[name] = ctx.getTransform().inverse(); M[name].ox = x; M[name].oy = y; }
+  function sprite(name, x, y) { ctx.drawImage(wear.yukata && /^(dress|skirt|upper_|fore_)/.test(name) ? (yukata(name) || IMG[name]) : IMG[name], x, y); M[name] = ctx.getTransform().inverse(); M[name].ox = x; M[name].oy = y; }
   function withBody(fn) { ctx.save(); ctx.translate(WAIST.x + body.x, WAIST.y + body.y); ctx.rotate(body.a); ctx.scale(1 + body.sq * 0.6, 1 - body.sq); ctx.translate(-WAIST.x, -WAIST.y); fn(); ctx.restore(); }
   function withHead(fn) { withBody(function () { ctx.translate(NECK.x + head.shift, NECK.y + head.shiftY); ctx.rotate(head.r); ctx.translate(-NECK.x, -NECK.y); fn(); }); }
   function drawUpper(k) { var A = ARM[k], a = arms[k], S = shoulderW(k); ctx.save(); ctx.translate(S.x, S.y); ctx.rotate(A.eA0 - a.e); sprite('upper_' + k, -A.up.pivot[0], -A.up.pivot[1]); ctx.restore(); }
@@ -551,16 +589,176 @@
       sprite('skirt', P.skirt.x, P.skirt.y);
       ctx.restore();
       sprite('dress', P.dress.x, P.dress.y);
+      drawWearBody();
     });
     ['R', 'L'].forEach(function (k) { if (arms[k].z === 'front') drawFore(k); });
     var fnm = faceName(), F = RIG.faces[fnm] || RIG.faces.main;
-    withHead(function () { sprite('face_' + fnm, F.x, F.y); drawExtras(); });
+    withHead(function () { sprite('face_' + fnm, F.x, F.y); drawWearHead(); drawExtras(); });
+    drawProps();
+    withHead(drawDream);
+  }
+
+  // ---------- her own day: what she holds, what she wears ----------
+  var activ = { name: null, pause: 0 }, wear = { scarf: false, straw: false, party: false, yukata: false, umbrella: false };
+  function activityOn() { return activ.name && mood.state === 'awake' && !grab && t > activ.pause && t >= moves.until && !offering && !extras.food && t > mood.flail && !PLACE.busy; }
+  function activityPose() {
+    if (wear.umbrella && mood.state === 'awake' && !grab && !offering && t >= moves.until) return 'umbrella';
+    if (!activityOn()) return null;
+    return { read: 'holdFront', tea: 'holdFront', sketch: 'holdFront', water: 'water', fan: 'fan' }[activ.name] || null;
+  }
+  function setActivity(name) {
+    if (activ.name === name) return;
+    var was = activ.name; activ.name = name || null;
+    if (was && !name) { bothArms('down'); armPlan.next = t + 1.5; head.shiftYT = 0; }
+    armPlan.next = Math.min(armPlan.next, t + 0.3);
+  }
+  // the yukata: her dress and sleeves redrawn in indigo with little flowers (made once)
+  var YK = {};
+  function yukata(name) {
+    if (YK[name] !== undefined) return YK[name];
+    var im = IMG[name]; if (!im) return (YK[name] = null);
+    var c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+    var g = c.getContext('2d'); g.drawImage(im, 0, 0);
+    var d = g.getImageData(0, 0, c.width, c.height), px = d.data, W = c.width, off = { dress: [534, 346], skirt: [533, 708], upper_L: [0, 0], upper_R: [0, 0], fore_L: [0, 0], fore_R: [0, 0] }[name] || [0, 0];
+    for (var i = 0; i < px.length; i += 4) {
+      if (px[i + 3] < 10) continue;
+      var r = px[i], gg = px[i + 1], b = px[i + 2], lum = (r + gg + b) / 3, x = (i / 4) % W + off[0], y = Math.floor(i / 4 / W) + off[1];
+      if (lum < 95) {
+        // a flower every so often on the indigo
+        var cx = Math.round(x / 74) * 74 + ((Math.round(y / 74) % 2) ? 37 : 0), cy = Math.round(y / 74) * 74, dx = x - cx, dy = y - cy, dd = Math.sqrt(dx * dx + dy * dy), ang = Math.atan2(dy, dx);
+        var petal = dd < 15 + 6 * Math.cos(ang * 5), k = lum / 95;
+        if (lum > 35 && petal) { px[i] = dd < 5 ? 255 : 250; px[i + 1] = dd < 5 ? 214 : 196; px[i + 2] = dd < 5 ? 110 : 210; }
+        else { px[i] = 36 + 40 * k; px[i + 1] = 48 + 46 * k; px[i + 2] = 104 + 60 * k; }
+      } else if (lum > 200 && b > 180) { px[i] = 236; px[i + 1] = 240; px[i + 2] = 252; }
+    }
+    g.putImageData(d, 0, 0);
+    return (YK[name] = c);
+  }
+  function drawWearBody() {
+    ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = '#5b4944'; ctx.lineWidth = 6;
+    if (wear.yukata) {    // the obi
+      ctx.fillStyle = '#f39ab6'; ctx.beginPath(); ctx.moveTo(552, 676); ctx.quadraticCurveTo(667, 690, 786, 674); ctx.lineTo(790, 742); ctx.quadraticCurveTo(667, 756, 548, 742); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ffe08a'; ctx.beginPath(); ctx.moveTo(552, 704); ctx.quadraticCurveTo(667, 716, 788, 702); ctx.lineTo(788, 714); ctx.quadraticCurveTo(667, 728, 552, 716); ctx.closePath(); ctx.fill();
+    }
+    if (wear.scarf) {
+      ctx.fillStyle = '#ee8a8a';
+      ctx.beginPath(); ctx.moveTo(588, 392); ctx.quadraticCurveTo(667, 430, 748, 390); ctx.lineTo(752, 440); ctx.quadraticCurveTo(667, 486, 584, 440); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(700, 448); ctx.lineTo(742, 452); ctx.lineTo(736, 590); ctx.lineTo(694, 580); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#d06c6c'; ctx.lineWidth = 4; for (var i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(700 + i * 2, 480 + i * 26); ctx.lineTo(740 - i * 1, 482 + i * 26); ctx.stroke(); }
+      ctx.strokeStyle = '#5b4944'; ctx.lineWidth = 5; for (var j = 0; j < 5; j++) { ctx.beginPath(); ctx.moveTo(700 + j * 9, 582 + (j % 2) * 3); ctx.lineTo(699 + j * 9, 606); ctx.stroke(); }
+    }
+    ctx.restore();
+  }
+  function drawWearHead() {
+    ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = '#5b4944'; ctx.lineWidth = 7;
+    if (wear.straw) {
+      ctx.fillStyle = '#f2d58a'; ctx.beginPath(); ctx.ellipse(655, 108, 300, 62, -0.04, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(500, 104); ctx.bezierCurveTo(505, -30, 805, -30, 810, 98); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ee8a8a'; ctx.beginPath(); ctx.moveTo(502, 70); ctx.bezierCurveTo(600, 92, 720, 92, 808, 66); ctx.lineTo(810, 98); ctx.bezierCurveTo(720, 122, 600, 122, 500, 100); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    if (wear.party) {
+      ctx.save(); ctx.translate(560, 70); ctx.rotate(-0.32);
+      ctx.fillStyle = '#a9d9f2'; ctx.beginPath(); ctx.moveTo(-70, 30); ctx.lineTo(0, -190); ctx.lineTo(70, 30); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#f39ab6'; [[-30, -20], [20, -70], [-6, -120], [28, 4]].forEach(function (d) { ctx.beginPath(); ctx.arc(d[0], d[1], 11, 0, Math.PI * 2); ctx.fill(); });
+      ctx.fillStyle = '#ffe08a'; ctx.beginPath(); ctx.arc(0, -196, 24, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+  // things she holds, drawn at her real hands
+  function drawProps() {
+    var on = activityOn() && !(wear.umbrella && arms.R.pose === 'umbrella'), name = on ? activ.name : null;
+    ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = '#5b4944'; ctx.lineWidth = 6;
+    if (name === 'read' || name === 'sketch' || name === 'tea') {
+      var L = handW('L'), Rh = handW('R'), mx = (L.x + Rh.x) / 2, my = (L.y + Rh.y) / 2 - 10;
+      if (name === 'tea') {
+        ctx.fillStyle = '#a9c3a0'; ctx.beginPath(); ctx.moveTo(mx - 46, my - 40); ctx.lineTo(mx + 46, my - 40); ctx.lineTo(mx + 36, my + 34); ctx.lineTo(mx - 36, my + 34); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#8fb986'; ctx.beginPath(); ctx.ellipse(mx, my - 40, 46, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 6; for (var st = 0; st < 2; st++) { var o = (t * 0.45 + st * 0.5) % 1; ctx.globalAlpha = 1 - o; ctx.beginPath(); ctx.moveTo(mx - 10 + st * 20, my - 56 - o * 90); ctx.quadraticCurveTo(mx + 8 + st * 20, my - 76 - o * 90, mx - 10 + st * 20, my - 96 - o * 90); ctx.stroke(); } ctx.globalAlpha = 1;
+      } else {
+        var open = name === 'read', w = 150, h = 110;
+        ctx.save(); ctx.translate(mx, my - 20); ctx.rotate(-0.08);
+        if (open) {
+          ctx.fillStyle = '#f39ab6'; ctx.beginPath(); ctx.moveTo(-w, -h / 2 + 8); ctx.lineTo(0, -h / 2 + 22); ctx.lineTo(w, -h / 2 + 8); ctx.lineTo(w, h / 2); ctx.lineTo(0, h / 2 + 14); ctx.lineTo(-w, h / 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = '#fffaf0'; ctx.beginPath(); ctx.moveTo(-w + 12, -h / 2 + 2); ctx.quadraticCurveTo(-w / 2, -h / 2 - 8, 0, -h / 2 + 14); ctx.quadraticCurveTo(w / 2, -h / 2 - 8, w - 12, -h / 2 + 2); ctx.lineTo(w - 12, h / 2 - 8); ctx.quadraticCurveTo(w / 2, h / 2 - 16, 0, h / 2 + 4); ctx.quadraticCurveTo(-w / 2, h / 2 - 16, -w + 12, h / 2 - 8); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.lineWidth = 3; ctx.strokeStyle = '#c9b9b2'; for (var ln = 0; ln < 4; ln++) { ctx.beginPath(); ctx.moveTo(-w + 30, -h / 2 + 26 + ln * 18); ctx.lineTo(-22, -h / 2 + 30 + ln * 18); ctx.moveTo(22, -h / 2 + 30 + ln * 18); ctx.lineTo(w - 30, -h / 2 + 26 + ln * 18); ctx.stroke(); }
+        } else {
+          ctx.fillStyle = '#fffaf0'; ctx.beginPath(); ctx.rect(-w * 0.8, -h * 0.7, w * 1.6, h * 1.3); ctx.fill(); ctx.stroke();
+          ctx.lineWidth = 4; ctx.strokeStyle = '#94c191'; ctx.beginPath(); ctx.moveTo(-70, 30); ctx.quadraticCurveTo(-20, -40, 30, 10); ctx.quadraticCurveTo(60, 40, 80, -20); ctx.stroke();
+          ctx.strokeStyle = '#5b4944'; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(60 + Math.sin(t * 5) * 14, 50); ctx.lineTo(130 + Math.sin(t * 5) * 14, -20); ctx.stroke();
+        }
+        ctx.restore();
+      }
+    } else if (name === 'water') {
+      var H = handW('R');
+      ctx.save(); ctx.translate(H.x + 30, H.y + 40); ctx.rotate(0.35 + 0.1 * Math.sin(t * 1.6));
+      ctx.fillStyle = '#a9c3f0'; ctx.beginPath(); ctx.moveTo(-60, -50); ctx.lineTo(60, -50); ctx.lineTo(70, 60); ctx.lineTo(-70, 60); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(60, 20); ctx.lineTo(170, -40); ctx.lineTo(178, -26); ctx.lineTo(66, 44); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-40, -50); ctx.quadraticCurveTo(0, -110, 40, -50); ctx.stroke();
+      ctx.fillStyle = '#82bad9'; for (var dr = 0; dr < 4; dr++) { var u2 = (t * 1.3 + dr / 4) % 1; ctx.beginPath(); ctx.arc(176 + u2 * 30, -30 + u2 * 220, 7, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+    } else if (name === 'fan') {
+      var F2 = handW('R');
+      ctx.save(); ctx.translate(F2.x, F2.y); ctx.rotate(-0.4 + 0.25 * Math.sin(t * 9));
+      ctx.fillStyle = '#c49a74'; ctx.fillRect(-6, -10, 12, 90); ctx.strokeRect(-6, -10, 12, 90);
+      ctx.fillStyle = '#fffaf0'; ctx.beginPath(); ctx.ellipse(0, -90, 80, 86, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#82bad9'; ctx.beginPath(); ctx.moveTo(-60, -70); ctx.quadraticCurveTo(-20, -100, 0, -70); ctx.quadraticCurveTo(20, -40, 60, -70); ctx.lineTo(60, -40); ctx.quadraticCurveTo(20, -10, 0, -40); ctx.quadraticCurveTo(-20, -70, -60, -40); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    if (wear.umbrella && arms.R.pose === 'umbrella') {
+      var U = handW('R'), top = headPt(V(640, -200)), topX = top.x, topY = top.y;
+      ctx.lineWidth = 8; ctx.strokeStyle = '#5b4944'; ctx.beginPath(); ctx.moveTo(U.x, U.y + 40); ctx.lineTo(topX, topY); ctx.stroke();
+      ctx.fillStyle = '#f39ab6'; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(topX - 420, topY + 210); ctx.quadraticCurveTo(topX, topY - 120, topX + 420, topY + 210);
+      for (var sg = 0; sg < 6; sg++) { var x0 = topX + 420 - sg * 140; ctx.quadraticCurveTo(x0 - 70, topY + 175, x0 - 140, topY + 210); } ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.lineWidth = 4; for (var rb = 1; rb < 6; rb++) { ctx.beginPath(); ctx.moveTo(topX, topY + 6); ctx.lineTo(topX + 420 - rb * 140, topY + 205); ctx.stroke(); }
+      ctx.fillStyle = '#fffaf0'; ctx.beginPath(); ctx.arc(topX, topY + 30, 46, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // ---------- earmuffs (music muted for her) and a snack in front of her mouth ----------
   var extras = { muffs: false, food: null };
+  var sickOn = false, dreamSy = [];
+  function drawSick() {
+    if (!sickOn) return;
+    ctx.save(); ctx.globalAlpha = 0.55;
+    [[592, 334], [734, 334]].forEach(function (c) { var g = ctx.createRadialGradient(c[0], c[1], 4, c[0], c[1], 44); g.addColorStop(0, 'rgba(240,110,120,0.9)'); g.addColorStop(1, 'rgba(240,110,120,0)'); ctx.fillStyle = g; ctx.fillRect(c[0] - 46, c[1] - 46, 92, 92); });
+    ctx.globalAlpha = 0.75; ctx.fillStyle = '#ee7f86'; ctx.beginPath(); ctx.ellipse(662, 352, 11, 8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  // little doodles floating up from her head while she sleeps
+  function drawDream() {
+    if (mood.state !== 'asleep' || !dreamSy.length) return;
+    var i = Math.floor(t / 6) % dreamSy.length, u = (t / 6) % 1, al = Math.min(1, u * 5, (1 - u) * 5);
+    var bx = 1040, by = 90;
+    ctx.save(); ctx.lineWidth = 6; ctx.strokeStyle = '#5b4944'; ctx.fillStyle = '#fffaf0';
+    [[860, 250, 14], [905, 200, 22]].forEach(function (c) { ctx.beginPath(); ctx.arc(c[0], c[1], c[2], 0, Math.PI * 2); ctx.fill(); ctx.stroke(); });
+    ctx.beginPath(); for (var k = 0; k <= 16; k++) { var a = k / 16 * Math.PI * 2, r = 1 + 0.12 * Math.sin(a * 6); ctx.lineTo(bx + Math.cos(a) * 130 * r, by + Math.sin(a) * 96 * r); } ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = al; ctx.translate(bx, by + Math.sin(t * 1.5) * 4); ctx.lineWidth = 6; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    doodle(dreamSy[i]);
+    ctx.restore();
+  }
+  function doodle(k) {
+    var c = ctx; c.strokeStyle = '#5b4944';
+    function fill(col) { c.fillStyle = col; c.fill(); c.stroke(); }
+    c.beginPath();
+    if (k === 'fish' || k === 'food') { c.moveTo(-60, 0); c.quadraticCurveTo(-10, -50, 40, 0); c.quadraticCurveTo(-10, 50, -60, 0); c.closePath(); fill(k === 'food' ? '#e2a65f' : '#f6a046'); c.beginPath(); c.moveTo(40, 0); c.lineTo(70, -26); c.lineTo(70, 26); c.closePath(); fill(k === 'food' ? '#e2a65f' : '#f6a046'); }
+    else if (k === 'book') { c.rect(-60, -40, 56, 80); fill('#a9c3f0'); c.beginPath(); c.rect(4, -40, 56, 80); fill('#f6a4a4'); }
+    else if (k === 'cat') { c.arc(0, 10, 44, 0, Math.PI * 2); fill('#ffffff'); c.beginPath(); c.moveTo(-40, -10); c.lineTo(-34, -60); c.lineTo(-10, -32); c.moveTo(40, -10); c.lineTo(34, -60); c.lineTo(10, -32); c.stroke(); c.beginPath(); c.arc(-15, 6, 4, 0, 7); c.arc(15, 6, 4, 0, 7); c.fillStyle = '#5b4944'; c.fill(); }
+    else if (k === 'rain') { c.arc(-20, -10, 30, Math.PI, 0); c.arc(20, -16, 34, Math.PI, 0); c.closePath(); fill('#dfe7f3'); [-30, 0, 30].forEach(function (x) { c.beginPath(); c.moveTo(x, 30); c.lineTo(x - 6, 52); c.stroke(); }); }
+    else if (k === 'note') { c.ellipse(-20, 30, 18, 13, -0.4, 0, 7); fill('#5b4944'); c.beginPath(); c.moveTo(-4, 26); c.lineTo(-4, -44); c.lineTo(36, -54); c.lineTo(36, -24); c.stroke(); }
+    else if (k === 'star') { for (var i = 0; i < 10; i++) { var a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 22 : 52; c.lineTo(Math.cos(a) * r, Math.sin(a) * r); } c.closePath(); fill('#ffe08a'); }
+    else if (k === 'swirl') { for (var j = 0; j < 40; j++) { var b = j * 0.4, rr = j * 1.4; c.lineTo(Math.cos(b) * rr, Math.sin(b) * rr); } c.stroke(); }
+    else if (k === 'shoe') { c.moveTo(-50, 20); c.lineTo(-50, -30); c.lineTo(-10, -30); c.quadraticCurveTo(0, 0, 50, 6); c.lineTo(50, 24); c.closePath(); fill('#f8c4d3'); }
+    else if (k === 'heart') { c.moveTo(0, 40); c.bezierCurveTo(-70, -10, -30, -60, 0, -24); c.bezierCurveTo(30, -60, 70, -10, 0, 40); fill('#f39ab6'); }
+    else if (k === 'house') { c.moveTo(-50, 40); c.lineTo(-50, -10); c.lineTo(0, -50); c.lineTo(50, -10); c.lineTo(50, 40); c.closePath(); fill('#f6d9a8'); }
+    else if (k === 'moon') { c.arc(0, 0, 46, 0.6, Math.PI * 2 - 0.6); c.quadraticCurveTo(10, 0, 37, 26); fill('#fff3c4'); }
+    else if (k === 'phone') { c.roundRect(-30, -50, 60, 100, 12); fill('#5b4944'); c.beginPath(); c.rect(-22, -40, 44, 76); fill('#c4e5f5'); }
+    else { c.arc(-24, 0, 30, 0, 7); c.arc(20, -10, 36, 0, 7); fill('#ffffff'); }
+  }
   function drawExtras() {
     var lw = 7;
+    drawSick();
     if (extras.muffs) {
       ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       ctx.strokeStyle = '#5b4944'; ctx.lineWidth = 34; ctx.beginPath(); ctx.moveTo(468, 230); ctx.bezierCurveTo(470, -40, 840, -40, 842, 230); ctx.stroke();
@@ -612,7 +810,7 @@
   function onSprite(names, sx, sy) { return names.some(function (n) { return alphaAt(n, sx, sy) > 30; }); }
 
   // ---------- touch, mouse, zoom ----------
-  var pointers = new Map(), pinch = null, pan = null, lastTap = 0, press = null;
+  var pointers = new Map(), pinch = null, pan = null, lastTap = 0, press = null, pan0 = null, HANDLE = null;
   function pt(e) { var r = cv.getBoundingClientRect(); return V(e.clientX - r.left, e.clientY - r.top); }
   cv.addEventListener('pointerdown', function (e) {
     cv.setPointerCapture(e.pointerId);
@@ -630,7 +828,15 @@
     var onLegs = !arm && !onSprite([face, 'dress', 'skirt'], p.x, p.y) && onSprite(['legs'], p.x, p.y);
     var onBody = !arm && !onLegs && onSprite([face, 'dress', 'skirt', 'legs', 'hairback'], p.x, p.y);
     finger.last = null; finger.v = V(0, 0); finger.a = V(0, 0);
-    if ((arm || onLegs || onBody) && !touchStart()) { refuse(w); return; }
+    if (arm || onLegs || onBody) activ.pause = t + 75;
+    var hk = arm ? 'arm' : onLegs ? 'leg' : onBody ? 'body' : null, rule = null;
+    if (hk) {
+      rule = HANDLE ? HANDLE(hk, mood.state) : null;
+      var verdict = rule && rule.v || (mood.state === 'fedUp' ? 'refuse' : 'ok');
+      if (verdict === 'refuse') { refuse(w, hk, rule && rule.why); return; }
+      if (mood.state === 'fedUp') { mood.lastTouch = t; mood.until = Math.min(mood.until || t + 2, t + 1.5); emit('soothed', { kind: hk }); }
+      else touchStart();
+    }
     if (arm) {
       grab = { type: 'arm', side: arm.side, d: arm.d, tx: w.x, ty: w.y };
       if (arms[arm.side].pose !== 'down') setPose(arm.side, 'down');
@@ -644,7 +850,7 @@
       var now = Date.now();
       if (now - lastTap < 320) { cam.s = 1; cam.y = 0; cam.free = 0; }
       lastTap = now;
-      pan = { x: p.x, y: p.y, cx: cam.x, cy: cam.y };
+      pan = { x: p.x, y: p.y, cx: cam.x, cy: cam.y, at: Date.now(), moved: false }; pan0 = { x: p.x, y: p.y };
     }
     if (grab) {
       cv.classList.add('grabbing');
@@ -656,6 +862,7 @@
         emit('hold', { x: press.x, y: press.y });
       });
       emit('grab', { type: grab.type });
+      if (rule && rule.v === 'wriggle') { var myGrab = grab; later(rnd(0.7, 1.3), function () { if (grab !== myGrab) return; grab = null; press = null; cv.classList.remove('grabbing'); var away = rnd(-1, 1) < 0 ? -1 : 1; body.vx += away * 320; body.va += away * 2.4; mood.flail = t + 0.7; bothArms('flail'); later(0.7, function () { bothArms('down'); }); mark('vein', 1.1); word(WORDS.refuse, headPt(V(820, 60))); emit('wriggled', { kind: hk }); }); }
       if (grab.type === 'leg') later(0.25, function () { if (grab && grab.type === 'leg' && press && press.moved) { mark('bang', 1.1); word(WORDS.grab, headPt(V(820, 60))); } });
     }
   });
@@ -670,7 +877,7 @@
     }
     if (press && Math.hypot(p.x - press.x, p.y - press.y) > 9) press.moved = true;
     if (grab) { var w = toWorld(p.x, p.y); grab.tx = w.x; grab.ty = w.y; if (grab.type === 'leg' && Math.abs(wrap(body.a)) > 2.4 && !grab.upside) { grab.upside = true; emit('upside'); } }
-    else if (pan) { cam.x = pan.cx + (p.x - pan.x); cam.y = clamp(pan.cy + (p.y - pan.y), -view.h * 0.6, view.h * 0.6); cam.free = t + 8; }
+    else if (pan) { if (Math.hypot(p.x - pan.x, p.y - pan.y) > 9) pan.moved = true; cam.x = pan.cx + (p.x - pan.x); cam.y = clamp(pan.cy + (p.y - pan.y), -view.h * 0.6, view.h * 0.6); cam.free = t + 8; }
   });
   function endPointer(e) {
     pointers.delete(e.pointerId);
@@ -681,8 +888,10 @@
         var turns = Math.abs(grab.turned) / (Math.PI * 2);
         emit('spun', { turns: turns }); var hp = headPt(V(820, 60)); word(WORDS.dizzy, V(hp.x + 30, hp.y)); showFace('boop', 1.6);
       }
+      var wasTap = pan && !pan.moved && Date.now() - pan.at < 350;
       grab = null; pan = null; press = null; cv.classList.remove('grabbing');
       if (wasBoop) boop(at);
+      else if (wasTap) { var tw = toWorld(pan0.x, pan0.y); emit('tapWorld', { x: tw.x, y: tw.y, sx: pan0.x, sy: pan0.y }); }
     }
   }
   cv.addEventListener('pointerup', endPointer);
@@ -750,7 +959,7 @@
   // what the rest of the app can ask of her body
   var BODY = {
     on: function (fn) { listeners.push(fn); },
-    act: act, showFace: showFace, wake: function () { if (mood.state === 'asleep') wakeUp(); mood.lastTouch = t; },
+    act: act, showFace: showFace, shock: shock, offer: offerPose, offerEnd: offerEnd, get offering() { return offering && offering.kind; }, wake: function () { if (mood.state === 'asleep') wakeUp(); mood.lastTouch = t; },
     nudge: function () { mood.lastTouch = t; },
     setTemper: function (name) { TEMPER.name = name; },
     setSleepAfter: function (sec) { SLEEP_AFTER = sec; },
@@ -765,6 +974,8 @@
       if (likes) { vibe.likes = true; vibe.until = t + 1e6; bothArms('vibe'); later(12, function () { if (arms.L.pose === 'vibe') bothArms('down'); }); }
       else { vibe.likes = false; vibe.until = t + 5; mood.flail = t + 0.9; bothArms('flail'); mark('vein', 1.4); later(1, function () { if (arms.L.pose === 'flail') bothArms('crossFront'); later(6, function () { if (arms.L.pose === 'crossFront') bothArms('down'); }); }); }
     },
+    activity: setActivity, get activityName() { return activ.name; }, pauseActivity: function (sec) { activ.pause = t + (sec || 90); },
+    wear: function (o) { Object.keys(o || {}).forEach(function (k) { if (k in wear) wear[k] = !!o[k]; }); },
     earmuffs: function (on) { extras.muffs = !!on; if (on) { mark('sweat', 1.2); body.sqv += 0.8; } },
     eat: function (img) {
       if (mood.state !== 'awake') setMood('awake');
@@ -783,5 +994,6 @@
     dizzy: function () { showFace('boop', 2.4); var hp = headPt(V(820, 60)); word(WORDS.dizzy, V(hp.x + 30, hp.y)); mark('sweat', 1.4); body.va += rnd(-3, 3); },
     goPlace: goPlace, get place() { return PLACE.name; }, setPlaceNow: function (n) { PLACE.name = n; var off = n === 'house' ? 0 : wander.x; body.x = wander.x = wander.target = off; },
     get temper() { return TEMPER.name; },
-    shake: function (s) { cam.shake = s || 0.3; }
+    shake: function (s) { cam.shake = s || 0.3; },
+    setHandleRule: function (fn) { HANDLE = fn; }, setSick: function (on) { sickOn = !!on; }, setDream: function (list) { dreamSy = (list || []).slice(0, 4); }
   };

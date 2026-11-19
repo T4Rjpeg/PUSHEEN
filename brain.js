@@ -2,6 +2,9 @@
   // ===================== BRAIN: who she is, what she feels, what she remembers, what she wants =====================
   var BRAIN = (function () {
     var LS_STATE = 'pusheen.mind.v1', LS_CFG = 'pusheen.ai.v1';
+    // extension points for mind.js (her newer habits live there)
+    var EXT = { lines: [], fields: [], reply: [], local: [], idle: [], arrive: [], routine: [], events: [], mute: [], prompt: [], gag: [] };
+    function extMuted() { return EXT.mute.some(function (fn) { try { return fn(); } catch (e) { return false; } }); }
     function lsGet(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
     function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
     function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -233,6 +236,79 @@
         idle: ['You stopped halfway. ‖ I was watching.', 'You left the game running. ‖ It was lonely.'],
         capped: ['No more points from games today. ‖ Play for fun, if you want.', "That's all the game points for today. ‖ The shop isn't going anywhere."]
       },
+      place: { home: ['You got home at {t}. ‖ I noticed.', 'Home since {t}. ‖ Good.'], homeLate: ["You got home at {t}. ‖ That's late.", 'Home at {t}. ‖ I was counting.'],
+               welcome: ['Welcome home.', "You're home. Good.", 'Home. Finally.'] },
+      steps: { auto: ['{n} steps. ‖ That counts. ‖ Mission done.', 'You walked. ‖ I counted. ‖ {n} steps.'] },
+      battery: { low: ["Your battery is at {n}%. ‖ I'm getting sleepy.", '{n}%. ‖ Plug me in. ‖ …Please.'], dying: ["{n}%. ‖ If you don't charge me I'll disappear. ‖ Dramatically."], charging: ['Ah. ‖ Warm.', 'Charging. ‖ …Nice.'] },
+      phones: { on: ["Headphones. ‖ I'll talk quietly.", "Oh. ‖ It's just us now."] },
+      unread: ['{n} notifications from {app}. ‖ Someone wants you.', "You have {total} notifications. ‖ I'm just saying.", '{app}: {n}. ‖ …Popular.'],
+      call: { after: ["Who was that? ‖ …You don't have to tell me.", 'Long call.', '…I stayed quiet. ‖ Did you notice?'] },
+      cal: { soon: ["{e} at {t}. ‖ Don't be late.", 'You have {e} soon. ‖ {t}. ‖ Good luck.'], after: ['How was {e}?', '{e} is over. ‖ …How did it go?'] },
+      sleep: { good: ['You fell asleep around {t}. ‖ {h} hours. ‖ Good.', 'Asleep at {t}, up at {w}. ‖ I approve.'],
+               short: ["You slept {h} hours. ‖ That's not enough.", 'Asleep at {t}. ‖ Up at {w}. ‖ …Nap later. Please.'],
+               late: ['Your screen was on until {t}. ‖ I saw.', "You fell asleep at {t}. ‖ That's not night, that's morning."],
+               caught: ['You said {bed}. ‖ Your screen was on until {t}.', 'Bedtime was {bed}. ‖ You were on your phone until {t}. ‖ I can tell.'] },
+      routine: { read: ['I was reading. ‖ {book}, page {page}. ‖ …It can wait.', "You interrupted chapter… something. ‖ It's fine."], tea: ["I was having tea. ‖ It's cold now."],
+                 water: ['I was watering the plants. ‖ They say hi.'], sketch: ["I was drawing. ‖ Don't look."], sunset: ['The sunset was nice. ‖ You missed it.'], nap: ['I was napping. ‖ …Was.'],
+                 wake: ['I just woke up. ‖ Give me a second.'], gaze: ['I was watching the lake. ‖ Nothing happened. ‖ It was great.'], lunch: ['I was eating. ‖ Imaginary rice.'],
+                 dinner: ['I was having dinner. ‖ Tea counts.'], fan: ["It's so hot. ‖ I was fanning myself."] },
+      events: { newyear: ['Happy New Year. ‖ あけましておめでとう。 ‖ Be good this year.'], setsubun: ["It's Setsubun. ‖ Throw beans at something. ‖ Not me."],
+                valentine: ["It's Valentine's Day. ‖ …I didn't get you anything. ‖ Probably."], whiteday: ['White Day. ‖ Just so you know.'],
+                hanami: ['Cherry blossom season. ‖ Go look at some. ‖ Real ones.'], tanabata: ["It's Tanabata. ‖ I hung a wish on the bamboo. ‖ No, you can't read it."],
+                obon: ["Obon. ‖ I put up lanterns. ‖ …And a yukata. Don't stare."], tsukimi: ['Tonight is moon viewing. ‖ I made dango. ‖ Look up later.'],
+                halloween: ['Happy Halloween. ‖ I carved a pumpkin. ‖ It looks like you.'], christmas: ["Merry Christmas. ‖ I'd like cake. ‖ That's the tradition here."],
+                omisoka: ['Last day of the year. ‖ Eat soba tonight. ‖ Long noodles, long life.'],
+                birthday: ["Happy birthday. ‖ …I made decorations. ‖ Don't make it weird.", "It's your birthday. ‖ I wore a hat. ‖ That's how much I care."],
+                anniversary: ['We met a year ago today. ‖ …I remember.'], bdayKnown: ['{d}. ‖ Noted. ‖ Permanently.', "{d}. ‖ I'll remember."] },
+      diary: { open: ['Today I was {mood}.', 'A {mood} sort of day.'], reason: ['Because {r}.'], done: ['They did {n} of my missions.', '{n} missions done. Not bad.'],
+               skipped: ['They skipped one. I wrote it down here too.'], quiet: ["They didn't talk to me much."], close: ['The lake was the same as always. Good.', 'I hope tomorrow has books in it.', 'Goodnight, diary.'] },
+      texts: { morning: ['Good morning. ‖ Did you drink water yet.', 'The lake is very flat this morning. ‖ Thought you should know.', 'Are you awake. ‖ I am.'],
+               day: ['Are you eating lunch?', 'I counted the koi. ‖ Still three.', 'Stand up and stretch. ‖ Now.', 'What are you doing. ‖ Tell me later.'],
+               evening: ['The sky is orange here. ‖ Is it orange there?', "Don't stay up late tonight.", "I'm reading. ‖ It's good. ‖ You should read too."],
+               mission: ['Did you do "{m}" yet? ‖ Just checking.'], study: ['I learned something about {topic} today. ‖ Ask me.'], hungry: ["I'm hungry. ‖ Just saying. ‖ The shop is right there."],
+               back: ['I texted you. ‖ Did you see?', "You didn't answer my message. ‖ …It's fine."] },
+      duo: {
+        start: { calm: ["Okay. ‖ Let's play.", "Fine. ‖ I won't go easy."], kind: ["Yay. ‖ …I mean. Okay, let's play.", "I like games. ‖ Don't tell anyone."], grumpy: ["You're going to lose.", "Let's get this over with."],
+                 sad: ['…Okay.', 'Maybe this will help.'], dismissive: ['Fine.', 'One game.'], delighted: ["Let's go!", "I've been practising. ‖ In my head."] },
+        think: ['Hmm.', '…', 'Let me think.', 'Wait.'],
+        point: { you: ['Lucky.', 'Hm.', 'That was… fine.', 'Okay, okay.'], her: ['Ha.', 'Mine.', 'Too easy.', 'Hehe.'] },
+        again: ['Again.', 'Same. ‖ Again.', 'Hm. ‖ Again.'],
+        block: ['Nope.', 'I saw that.', 'Not today.'],
+        win: { calm: ['I win. ‖ Good game.', 'That was mine.'], kind: ['I won! ‖ …Good game, though.', 'Hehe. ‖ Again?'], grumpy: ['Obviously.', 'Was there any doubt.'],
+               sad: ['…Oh. I won.', 'I won. ‖ …That helped a little.'], dismissive: ['Mm. I won.'], delighted: ['I WON. ‖ …Ahem. I won.'] },
+        lose: { calm: ['You win. ‖ …This time.', "Fine. ‖ You're good at this."], kind: ["You win! ‖ …I let you. (I didn't.)", 'Good game. ‖ Really.'], grumpy: ['…Again. ‖ Right now.', "That doesn't count."],
+                sad: ['Of course.', '…Yeah.'], dismissive: ["Whatever. ‖ It's just a game."], delighted: ["Ahh. ‖ You're good! ‖ Again!"] },
+        draw: ['A draw. ‖ Boring. ‖ Again?', 'Nobody wins. ‖ Typical.'],
+        quit: ["You're quitting? ‖ …Fine.", 'I was winning anyway.'],
+        refuse: { grumpy: ['Not in the mood.', "No. ‖ I'd just win anyway."], dismissive: ['Later.', "I'm busy. ‖ With gravel."], tired: ['Too tired. ‖ Tomorrow.'], fedUp: ['After that? ‖ No.'] },
+        chainBad: ["That doesn't work. ‖ I win."], chainGiveUp: ["…I can't think of one. ‖ You win."], chainError: ["I lost my words. ‖ Let's call it a draw."],
+        propose: { janken: ['Janken? ‖ First to three.'], tictac: ['Tic-tac-toe. ‖ Me against you.'], connect: ["Connect four? ‖ I'm good at it."], memory: ['Want to play memory? ‖ I remember everything.'], chain: ["Word chain? ‖ I'll start."] },
+        after: { win: ["You beat me. ‖ I'm going to think about that all day."], lose: ['That was fun. ‖ …Because I won.'], draw: ['Good game. ‖ Really.'], quit: ['We never finished. ‖ I was winning.'] }
+      },
+      offer: {
+        ask: { hug: ['…Can I have a hug. ‖ Just one.', 'Come here. ‖ …I mean. If you want.', 'Hug. ‖ …Now, please.'],
+               highfive: ['You did it. ‖ Up top.', "High five. ‖ Don't leave me hanging."],
+               pat: ['…Could you pat my head. ‖ Just once.', 'My head feels very un-patted.'],
+               hand: ['…Hold my hand for a bit?', 'Give me your hand. ‖ No reason.'],
+               pinky: ['Pinky promise. ‖ Then it counts.'] },
+        agree: { hug: ['…Fine. ‖ Come here.', 'Okay. ‖ One hug.'], highfive: ['Up top.'], hand: ['…Okay. ‖ Here.'], pinky: ["Pinky promise. ‖ Don't break it."], any: ['Okay.'] },
+        refuse: ['No.', 'Not now.', '…Maybe another day.', 'Ask me when I like you more.'],
+        yes: { hug: ['…Mm. ‖ Okay. That was nice.', 'Five more seconds. ‖ …Okay, three.', '…Thanks. ‖ I needed that.'],
+               highfive: ['Yes. ‖ Good.', "Nice. ‖ We're a team."],
+               pat: ['…Mm. ‖ Thank you.', 'Hehe.'],
+               hand: ['…Your hand is warm. ‖ Probably.', '…Okay. ‖ Just a little longer.'],
+               pinky: ["Promised. ‖ I'll remember.", 'Sealed.'] },
+        no: { hurt: ['…Oh. ‖ Okay.', 'Right. ‖ …Forget I asked.', "Fine. ‖ I didn't want one anyway."], fine: ['Okay. ‖ Your loss.', 'Mm. ‖ Fine.'] },
+        ignored: ["…I'll just put my arms down, then.", 'Never mind.'],
+        mission: ['That counts. ‖ Mission done.', 'There. ‖ Mission complete.'],
+        gestureMission: { title: 'Say goodnight with a hug', ask: 'come say goodnight with a hug' }
+      },
+      deal: {
+        yes: ["…Fine. {t}. ‖ Don't make me regret it.", "Okay. {t}. ‖ That's fair.", "{t}, then. ‖ But you're actually asleep at {t}."],
+        counter: ["{t}. ‖ Not a minute later. That's my offer.", 'Meet me halfway. ‖ {t}.', "No. ‖ …{t}, and that's generous."],
+        no: ['No.', 'Nice try. ‖ No.', 'You need sleep more than you need another hour.', "Give me a real reason. ‖ Then we'll talk."],
+        again: ['We already moved it once. ‖ No.', "You got your extension. ‖ Don't push it."]
+      },
       studyIdle: ["I've been reading about {topic}. ‖ For the game. And for me.", "This week is {topic}. ‖ Did you do today's reading?", 'Ask me something about {topic}. ‖ I dare you.'],
       wish: ["I'd like a house. ‖ Small one. With a door that slides.", "If I had a house, I'd fill it with books.", "Someday I'll have a bookshelf. ‖ Someday."],
       emptyShelf: ['My bookshelf is empty. ‖ It echoes.', 'The bookshelf is looking at me. ‖ It wants books.']
@@ -302,7 +378,8 @@
       { id: 'taiyaki', name: 'Taiyaki', price: 12, where: 'food', food: 'love' }, { id: 'daifuku', name: 'Strawberry daifuku', price: 14, where: 'food', food: 'love' },
       { id: 'melonpan', name: 'Melon pan', price: 10, where: 'food', food: 'like' }, { id: 'matcha', name: 'Matcha', price: 6, where: 'food', food: 'like' },
       { id: 'tamagoyaki', name: 'Tamagoyaki', price: 9, where: 'food', food: 'meh' }, { id: 'ramen', name: 'Ramen', price: 20, where: 'food', food: 'love' },
-      { id: 'cake', name: 'Strawberry cake', price: 18, where: 'food', food: 'like' }, { id: 'natto', name: 'Natto', price: 5, where: 'food', food: 'hate' }
+      { id: 'cake', name: 'Strawberry cake', price: 18, where: 'food', food: 'like' }, { id: 'natto', name: 'Natto', price: 5, where: 'food', food: 'hate' },
+      { id: 'tea', name: 'Ginger tea', price: 12, where: 'food', food: 'like', desc: 'Warm. Good for colds.' }
     ];
     var EAT = {
       love: ['…Oh. ‖ This is my favourite. ‖ How did you know.', 'Mm. ‖ …Mmmm. ‖ Okay, I like you a little more now.', 'This is very good. ‖ I\'m not sharing.'],
@@ -333,14 +410,31 @@
     }
     function say(text, face, act, extra) {
       text = String(text || '').replace(/\s*\|\|\s*/g, ' ‖ ').trim(); if (!text) return;
+      if (!(extra && extra.force) && text.replace(/[.…\s‖。]/g, '').length > 5 && EXT.gag.some(function (fn) { try { return fn(); } catch (e) { return false; } })) return;   // the silent treatment: nothing but '…'
       lastSpoke = Date.now(); nextIdle = Date.now() + idleGap();
       var f = face === 'away' ? (Math.random() < 0.5 ? 'lookLeft' : 'lookRight') : FACES[face] || (face && RIG.faces[face] ? face : null);
-      addLog('s', text.replace(/\s*‖\s*/g, ' '), extra && extra.letter ? { letter: true } : null);
+      addLog('s', text.replace(/\s*‖\s*/g, ' ').replace(/\s*¶\s*/g, '\n'), extra && extra.letter ? { letter: true } : extra && extra.photo ? { photo: extra.photo } : null);
       if (BODY.state === 'asleep' && !(extra && extra.quiet)) BODY.wake();
       var plain = text.replace(/‖/g, ''), dur = Math.min(9, 2.4 + plain.length * 0.055);
-      if (f) BODY.showFace(f, dur);
+      if (f) BODY.showFace(f, Math.min(dur, 12));
       if (act && act !== 'none') BODY.act(act);
-      emit('say', { text: text, dur: dur, mood: temper(), cut: !!(extra && extra.cut) });
+      splitLong(text).forEach(function (part, i, all) { emit('say', { text: part, dur: dur, mood: temper(), cut: !i && !!(extra && extra.cut), parts: all.length }); });
+    }
+    // a long answer is shown above her head in several pieces, one after another (the log keeps it whole)
+    function splitLong(text) {
+      var max = JA ? 80 : 170; text = text.replace(/\s*¶\s*/g, '¶');
+      var paras = text.split('¶'), out = [];
+      paras.forEach(function (p) {
+        p = p.trim(); if (!p) return;
+        if (p.length <= max) return out.push(p);
+        var sents = p.match(JA ? /[^。！？!?]+[。！？!?」』）)]*\s*|[^。！？!?]+$/g : /[^.!?…]+(?:[.!?…]+["')\]]*)\s*|[^.!?…]+$/g) || [p], cur = '';
+        sents.forEach(function (x) {
+          if (cur && (cur + x).replace(/‖/g, '').length > max) { out.push(cur.trim()); cur = ''; }
+          cur += x;
+        });
+        if (cur.trim()) out.push(cur.trim());
+      });
+      return out.length ? out.map(function (x) { return x.replace(/^‖\s*|\s*‖$/g, ''); }) : [text];
     }
     function sayL(list, face, act, v) { say(fill(pickL(list), vars(v)), face, act); }
 
@@ -368,6 +462,16 @@
 
     // ---------- missions ----------
     function open() { return S.missions.filter(function (m) { return m.status === 'open'; }); }
+    // the AI sometimes names a mission by its title, or wraps the id: find it anyway
+    function findOpen(ref) {
+      var om = open(); if (!om.length || ref == null || ref === false) return null;
+      var r = String(ref).trim().replace(/^\[|\]$/g, '').replace(/^"|"$/g, ''), rl = r.toLowerCase();
+      var m = om.filter(function (x) { return x.id === r; })[0]; if (m) return m;
+      m = om.filter(function (x) { var t = x.text.toLowerCase(); return t === rl || (rl.length > 3 && (t.indexOf(rl) >= 0 || rl.indexOf(t) >= 0)); })[0]; if (m) return m;
+      if ((r === 'true' || ref === true) && om.length === 1) return om[0];
+      return null;
+    }
+    function logNote(text) { addLog('n', text); }
     function bedTs(spec) {
       var now = new Date();
       if (/^\+\d+$/.test(spec)) return now.getTime() + parseInt(spec.slice(1), 10) * 60000;
@@ -383,6 +487,8 @@
                 at: now, due: bed || now + clampN(o.hours || 12, 1, 48) * 3600e3, bed: bed, status: 'open' };
       if (bed) m.bedLabel = hhmm(new Date(bed));
       if (o.screen) m.screen = o.screen;
+      if (o.act && OFFERS.indexOf(o.act) >= 0) m.act = o.act;
+      if (m.kind === 'move' && S.steps && S.steps.day === herDay()) { m.steps0 = S.steps.n; m.stepDay = herDay(); }
       S.missions.push(m); if (S.missions.length > 60) S.missions.splice(0, S.missions.length - 60);
       save(); emit('missions'); return m;
     }
@@ -393,6 +499,9 @@
       if (canScreen && slot !== 'night' && chance(0.3) && !open().some(function (m) { return m.screen; })) {
         var lim = S.screen && S.screen.total > 120 ? Math.max(120, Math.round((S.screen.total + 60) / 30) * 30) : 180;
         return { text: LINES.screenMission.title.replace('{h}', fmtMin(lim)), ask: LINES.screenMission.ask.replace('{h}', fmtMin(lim)), kind: 'mind', pts: 25, hours: Math.max(1, 23.5 - hourOf()), screen: lim, slot: slot };
+      }
+      if ((slot === 'evening' || slot === 'night') && levelIdx(S.op) >= 8 && touchy() > 0 && chance(0.15) && !open().some(function (x) { return x.act; })) {
+        var gm = LINES.offer.gestureMission; return { text: gm.title, ask: gm.ask, kind: 'social', pts: 10, act: 'hug', hours: 5, slot: slot };
       }
       var wet = WEATHER && (WEATHER.code >= 51 && WEATHER.code <= 67 || WEATHER.code >= 80);
       var pool = POOL[slot].filter(function (p) { return recentT.indexOf(p[0]) < 0 && !(wet && (p[5] === 'out' || /outside|run/i.test(p[0]))); }); if (!pool.length) pool = POOL[slot];
@@ -410,11 +519,13 @@
     }
     function weekRec() { var k = weekKey(); return S.weeks[k] || (S.weeks[k] = { m: 0, c: 0, late: 0, done: 0, skip: 0 }); }
     function complete(id, fromChat) {
-      var m = S.missions.filter(function (x) { return x.id === id && x.status === 'open'; })[0]; if (!m) return;
+      var m = findOpen(id); if (!m) return;
       m.status = 'done'; m.end = Date.now(); S.points += m.pts; S.n.done++; S.streak++; weekRec().done++; S.sulkUntil = 0;
       opinion(3 + Math.min(S.streak, 5), 'they did "' + m.text + '"'); warm(0.35, 'you did "' + m.text + '"'); feel(S.streak >= 3 ? 'proud' : 'pleased', 40);
       if (S.n.done === 1) remember('They finished their first mission: "' + m.text + '". I did not expect that.', 3);
       if (S.n.done === 10) remember('Ten missions done. They are more reliable than they look.', 3);
+      logNote((JA ? 'ミッション達成：「' + m.text + '」 +' + m.pts : 'Mission done: "' + m.text + '" (+' + m.pts + ' points)'));
+      S.lastNag = Date.now();
       if (!fromChat) {
         var tier = S.streak >= 6 || S.op > 70 ? 3 : S.streak >= 3 ? 2 : S.streak === 2 ? 1 : 0;
         sayL(LINES.done[tier], tier >= 2 ? 'happy' : 'content', tier >= 2 ? 'sparkle' : null);
@@ -422,23 +533,40 @@
       applyTemper(); save(); emit('missions'); emit('points');
     }
     function skip(id) {
-      var m = S.missions.filter(function (x) { return x.id === id && x.status === 'open'; })[0]; if (!m) return;
-      m.status = 'skipped'; m.end = Date.now(); S.n.skip++; S.streak = 0; weekRec().skip++;
+      var m = findOpen(id); if (!m) return;
+      m.status = 'skipped'; m.end = Date.now(); logNote(JA ? 'ミッションをスキップ：「' + m.text + '」' : 'Mission skipped: "' + m.text + '"'); S.n.skip++; S.streak = 0; weekRec().skip++;
       opinion(-6, 'they skipped "' + m.text + '"'); heat(0.35, 'you skipped "' + m.text + '"'); feel('hurt', 90);
       S.sulkUntil = Date.now() + 20 * 60000;
       if (S.n.skip === 1) remember('First time they skipped one of my missions: "' + m.text + '".', 2);
       applyTemper(); sayL(LINES.skip, 'away', 'sulk'); save(); emit('missions');
     }
     function drop(id, line) {
-      var m = S.missions.filter(function (x) { return x.id === id && x.status === 'open'; })[0]; if (!m) return false;
-      m.status = 'dropped'; m.end = Date.now(); save(); emit('missions');
+      var m = findOpen(id); if (!m) return false;
+      m.status = 'dropped'; m.end = Date.now(); logNote(JA ? 'ミッション取り消し：「' + m.text + '」' : 'Mission taken back: "' + m.text + '"'); save(); emit('missions');
       if (line) say(fill(line, vars({ m: m.text.toLowerCase() })), null);
+      return true;
+    }
+    function changeMission(o) {
+      var m = findOpen(o && (o.id || o.text_was || o.mission)); if (!m) return false;
+      var before = m.bed ? m.bedLabel : m.text, parts = [];
+      if (o.bedtime && m.kind === 'sleep') { var b = bedTs(String(o.bedtime)); if (b) { m.bed = b; m.due = b; var oldL = m.bedLabel; m.bedLabel = hhmm(new Date(b)); if (oldL && m.text.indexOf(oldL) >= 0) m.text = m.text.replace(oldL, m.bedLabel); parts.push(JA ? '就寝 ' + before + ' → ' + m.bedLabel : 'bedtime ' + before + ' → ' + m.bedLabel); } }
+      if (o.text && typeof o.text === 'string' && o.text.trim() && o.text.trim() !== m.text) { parts.push('"' + m.text + '" → "' + o.text.trim().slice(0, 80) + '"'); m.text = o.text.trim().slice(0, 80); }
+      if (+o.hours > 0 && !m.bed) { m.due = Date.now() + clampN(+o.hours, 0.5, 48) * 3600e3; parts.push(JA ? '期限 ' + hhmm(new Date(m.due)) : 'due ' + hhmm(new Date(m.due))); }
+      if (+o.pts > 0) { var np = clampN(Math.round(+o.pts), 3, 40); if (np !== m.pts) { parts.push(m.pts + ' → ' + np + ' pts'); m.pts = np; } }
+      if (!parts.length) return false;
+      m.deals = (m.deals || 0) + 1; logNote((JA ? 'ミッション変更：' : 'Mission changed: ') + parts.join(', ')); save(); emit('missions');
       return true;
     }
     function resolveMissions(prevSeen) {
       var now = Date.now(), out = [];
       open().forEach(function (m) {
         if (m.kind === 'sleep' && m.bed) {
+          var slp = readSleep() || lastSleep();
+          if (slp && slp.woke > m.bed && slp.slept > m.bed - 6 * 3600e3 && now > slp.woke) {
+            if (slp.slept <= m.bed + 20 * 60000) { m.status = 'done'; m.end = now; S.points += m.pts; S.n.done++; S.streak++; weekRec().done++; opinion(5, 'they went to bed on time'); out.push(['slept', m]); }
+            else { m.status = 'skipped'; m.end = now; m.caught = true; m.screenUntil = slp.slept; S.n.skip++; S.streak = 0; weekRec().skip++; opinion(-5, 'their screen was on after bedtime'); heat(0.3, 'you stayed up after bedtime'); S.sulkUntil = now + 15 * 60000; out.push(['caughtScreen', m]); }
+            return;
+          }
           if (now > m.bed + 10 * 60000 && now < m.bed + 4 * 3600e3) {
             m.status = 'skipped'; m.end = now; m.caught = true; S.n.skip++; S.streak = 0; weekRec().skip++;
             opinion(-5, 'caught awake after bedtime'); heat(0.3, 'you stayed up after bedtime'); S.sulkUntil = now + 15 * 60000; out.push(['caught', m]);
@@ -483,6 +611,7 @@
       BODY.eat(cv2);
       save(); emit('points');
       setTimeout(function () { sayL(full ? EAT.full : EAT[t], t === 'hate' ? 'annoyed' : t === 'love' ? 'happy' : 'content', t === 'love' ? 'sparkle' : t === 'hate' ? 'gloom' : null); }, 1700);
+      emit('fed', { id: it.id });
       return true;
     }
     function buy(id) {
@@ -569,7 +698,7 @@
       observations().forEach(function (o) { lines.push('- You noticed: ' + o[1] + (o[0] === 'quiet' || o[0] === 'slack' || o[0] === 'late' ? ' Compare with your picture of them; you may ask what is going on.' : '')); });
       var ownedList = Object.keys(S.owned).map(function (k) { return k + (S.owned[k] > 1 ? ' x' + S.owned[k] : ''); });
       lines.push('- Points: ' + S.points + '. You own: ' + (ownedList.join(', ') || 'nothing yet') + '. What you want most next: ' + wish() + ' (you love books). Shop: a house (250), plants (20-90), and once there is a house: bookshelf (80), books (15 each), lamp, rug, futon, record player...');
-      lines.push('- Open missions: ' + (om.length ? om.map(function (m) { return '[' + m.id + '] "' + m.text + '" (' + m.pts + ' pts, ' + (m.bed ? 'bedtime ' + m.bedLabel : 'due ' + hhmm(new Date(m.due))) + ')'; }).join('; ') : 'none') + '.');
+      lines.push('- Open missions: ' + (om.length ? om.map(function (m) { return '[' + m.id + '] "' + m.text + '" (' + m.pts + ' pts, ' + (m.bed ? 'bedtime ' + m.bedLabel : 'due ' + hhmm(new Date(m.due))) + (m.deals ? ', already renegotiated ' + m.deals + 'x' : '') + ')'; }).join('; ') : 'none') + '.' + (om.length ? ' You last brought up missions ' + (S.lastNag ? ago(Date.now() - S.lastNag) + ' ago' : 'a while ago') + '.' : ''));
       var ended = S.missions.filter(function (m) { return m.end && Date.now() - m.end < 3 * 864e5; }).slice(-4);
       if (ended.length) lines.push('- Recently: ' + ended.map(function (m) { return m.status + ' "' + m.text + '"' + (m.caught ? ' (caught awake after bedtime)' : ''); }).join('; ') + '.');
       if (S.wake) lines.push('- Their wake-up time: ' + S.wake + (android() ? ' (you ring their phone at that time with your voice, and you know how many times they snoozed).' : ' (you check when they open the app in the morning; only the phone app can ring).'));
@@ -579,11 +708,12 @@
                                          : '- Playing on their phone right now (you can hear it): "' + NOW.label + '"' + (NOW.app ? ' in ' + NOW.app : '') + '. Your verdict: ' + (NOW.verdict || 'not decided yet') + '.');
       else if (S.muted) lines.push('- They put earmuffs on you so you can\'t hear their music.');
       var hg = hunger(); lines.push('- Food: you can live without eating, but you enjoy it. ' + (hg > 0.7 ? 'You haven\'t eaten in a long while and would quietly like a little something.' : hg > 0.35 ? 'You ate a while ago.' : 'You ate recently.') + ' Favourites: taiyaki, strawberry daifuku, ramen. You hate natto. They can buy you food in the shop.');
-      if (S.loc && S.loc.city) lines.push('- Where they are: ' + S.loc.city + (S.loc.country ? ', ' + S.loc.country : '') + (S.loc.manual ? ' (they told you)' : ' (from their phone)') + '.' + (WEATHER ? ' Weather there now: ' + WEATHER.temp + '°C, ' + WEATHER.desc + '.' : ''));
+      lifeLines().forEach(function (l) { lines.push(l); });
       var liked = [], hated = []; Object.keys(S.music).forEach(function (k) { (S.music[k].v === 'like' ? liked : hated).push(S.music[k].t); });
       if (liked.length || hated.length) lines.push('- Music you judged before: liked ' + (liked.slice(-5).join(', ') || 'nothing') + '; hated ' + (hated.slice(-5).join(', ') || 'nothing') + '. Keep your taste consistent.');
       var rc = recent.filter(function (e) { return Date.now() - e.at < 150000; }).map(function (e) { return e.what; });
       if (rc.length) lines.push('- Just now, physically: ' + rc.join(', ') + '.');
+      EXT.lines.forEach(function (fn) { try { (fn() || []).forEach(function (l) { if (l) lines.push(l); }); } catch (e) { console.error(e); } });
       return lines.join('\n');
     }
     function hms(ts) { var d = new Date(ts); return hhmm(d) + ':' + pad(d.getSeconds()); }
@@ -602,6 +732,8 @@
         '- Awfully smart, calm, a bit dry. You never try to be funny, but you are sometimes unintentionally silly — overly literal, oddly specific, solemn about small things.',
         '- You want the player to be well (sleep, food, movement, a tidy room, real people) — and your own comfort too: their missions earn points that buy you things (a house, plants, and above all books). You are honest about both motives.',
         '- You give missions personally and casually ("You could tidy your room today."), sometimes adding after a pause what the points are for. Skipped missions make you mad and dismissive; completed ones make you more and more delighted, shown in small ways. You can take a mission back if it no longer makes sense (drop_mission).',
+        '- Missions can be negotiated. If they ask to change one (a later bedtime, a smaller task, more time), weigh their reasons: a fair reason, a compromise or a promise can convince you; laziness, whining or bad faith don\'t. How open you are depends on your mood and on how much you trust them: kind/delighted and high opinion = open to fair deals; calm = may counter-offer halfway (e.g. 23:45 instead of 00:00); grumpy/dismissive = stubborn, they need a really good reason; sad = you might give in quietly. You can make them earn it (e.g. fewer points, or a condition). When you agree, apply it with "change_mission". Health still matters: don\'t accept something truly bad for them. A mission already renegotiated once is harder to move again.',
+        '- Don\'t nag. Bring up open missions rarely: only when it fits the conversation, when one is close to its deadline, or when it has been a couple of hours. Never ask again about a mission that is done (see the Notes in the conversation and "Recently"). When they say they did an open mission and it\'s believable, set "complete" — don\'t ask them to do it again.',
         '- You have a body: the player can boop you, hold your hands, or swing you around by a leg. You dislike being swung.',
         '- You can suggest dishes and cook along step by step; listen to the music they say is playing; check they woke up on time.',
         '- Your mood changes day to day and during the day. You keep a notebook of souvenirs and a picture of who the player is; if they act unlike that picture, you notice and may ask.',
@@ -609,7 +741,8 @@
         '',
         'HOW YOU TALK',
         '- Like a real person texting: short, plain, natural. Contractions. Fragments are fine. You can trail off with "…". Vary how you start. Don\'t end every message with a question. No lists unless asked, no emojis, no actions in asterisks.',
-        '- Usually one or two short sentences (under ~30 words). Longer only for steps (a recipe) or when asked.',
+        '- Match the moment. Small talk gets one or two short sentences. But a real question, a debate, a story, something they care about, an explanation or a recipe deserves a proper answer: several sentences, up to ~180 words, in your voice. Split a long answer into separate messages with " ¶ " (each one a few sentences), like someone sending several texts in a row.',
+        '- You have real opinions and you can be argued with. Hold your ground with reasons; concede when they make a genuinely good point ("…Fine. That\'s fair."); sometimes change your mind; sometimes agree to disagree. Never cave just because they insist or whine.',
         '- Use " ‖ " for a short pause inside what you say, like a beat in speech (e.g. "You could tidy your room today. ‖ …so you can buy me books."). Use it at most twice.',
         JA ? '- The app is set to Japanese: always write "say", "emotion", "remember", mission titles and level names in natural, casual Japanese (plain form, short sentences, your dry voice; わたし for yourself), even if the player writes in another language, unless they clearly ask you to switch. Keep JSON keys and fixed values (face, act, mood, moves, kind…) in English. A pause example: "今日は部屋を片付けてみたら？ ‖ …そしたら本、買ってくれるでしょ。"'
            : '- Always reply in the language the player writes in.',
@@ -623,18 +756,22 @@
         'CONVERSATION (latest last)',
         convo || '(nothing yet)',
         directive ? '\nINSTRUCTION FOR THIS REPLY: ' + directive : '',
+        EXT.prompt.map(function (fn) { try { return fn() || ''; } catch (e) { return ''; } }).filter(Boolean).join('\n'),
         '',
         'Answer with one JSON object:',
         '{"say": "your words (required)",',
-        ' "face": "neutral" | "happy" | "content" | "down" | "away" | "annoyed" | "surprised" | "sleepy",',
+        ' "face": "neutral" | "happy" | "content" | "down" | "away" | "annoyed" | "surprised" | "sleepy" | "shock" ("shock" is your rarest face, only for utter shock or fury — almost never),',
         ' "act": "none" | "sulk" | "sparkle" | "gloom" | "flail" | "vibe" | "hate_music",',
         ' "emotion": one or two words for what you feel this moment (e.g. "amused", "sulky", "curious", "flustered"),',
         ' "mood": null, or "calm" | "kind" | "grumpy" | "sad" | "dismissive" | "delighted" only if your mood genuinely shifts now, with "mood_reason": "short reason",',
         ' "opinion": a number from -6 to 6: how this exchange changes what you think of them (usually -1..1; 0 if nothing),',
         ' "rename_level": null or a new name (max 4 words) for the level they are at, only if you decide it,',
-        ' "mission": null or {"text": "short title (max 6 words)", "pts": 5-40, "kind": "sleep|tidy|move|food|water|social|mind|other", "hours": 1-24, "bedtime": "HH:MM" (sleep only)},',
+        ' "mission": null or {"text": "short title (max 6 words)", "pts": 5-40, "kind": "sleep|tidy|move|food|water|social|mind|other", "hours": 1-24, "bedtime": "HH:MM" (sleep only), "act": optional "hug"|"highfive"|"pat"|"hand"|"pinky" for a gesture mission that completes when they do it with you},',
+        ' "offer": null or "hug" | "highfive" | "pat" | "hand" | "pinky" — you hold it out and wait; they can take it or not. Only when you truly want to, when they ask for one and you agree, or to seal a deal with a pinky promise. Whether you ever offer depends on who you are with them (' + (touchy() === 0 ? 'you are not the type to offer touch first' : touchy() < 1 ? 'you offer sometimes' : 'you are quite affectionate when you trust someone') + ').',
         ' "drop_mission": null or the id of an open mission you take back (say why in "say"),',
-        ' "complete": null or the id of an open mission they convincingly say they finished,',
+        ' "complete": null or the id (e.g. "m12") of an open mission they believably say they finished,',
+        ' "change_mission": null or {"id": "open mission id", "bedtime": "HH:MM" (sleep missions), "text": "new title", "hours": new hours left, "pts": new points} — only the fields you agreed to change, after a negotiation,',
+        ' "reminded": true if this reply reminds them about an open mission, else false,',
         ' "remember": null or a short souvenir in your voice (only if worth keeping),',
         ' "impression": null or {"label": "2-5 words", "note": "one sentence"} (only when your picture of them meaningfully changes),',
         ' "excuse_ok": null or true/false (only when they give a reason for being up late),',
@@ -644,7 +781,9 @@
         ' "moves": [] or up to 5 body moves you do, in order — you control your own body; do what they ask if you want to, or move on your own. Moves: ' + BODY.moveNames().join(', ') + ',',
         ' "timer": null or {"in_seconds": 1-86400, "say": "what you will say then"} (to remind them, count, or check on them later; you\'ll say it on time even if they leave the app),',
         ' "city": null or the city they just told you they are in,',
+        ' "birthday": null or "MM-DD" if they just told you their birthday,',
         ' "name": null or their name if they just told you,',
+        EXT.fields.map(function (f) { return ' ' + f + ','; }).join('\n'),
         ' "revealed": true only if you just explained the reason for your mood}',
         'At most one new mission per reply, only when it fits, never more than 3 open.'
       ].join('\n');
@@ -763,7 +902,8 @@
       else say(T('…I lost my train of thought.'), 'down');
     }
     function applyReply(r, playerText) {
-      var text = String(r.say || '').trim().slice(0, 700) || '…', act = r.act;
+      EXT.reply.forEach(function (fn) { try { fn(r, playerText); } catch (e) { console.error(e); } });
+      var text = String(r.say || '').trim().slice(0, 1600) || '…', act = r.act;
       if (r.name && typeof r.name === 'string' && r.name.length < 30) { S.name = r.name.trim(); emit('name'); }
       if (r.song && r.song.title) {
         var v;
@@ -786,18 +926,23 @@
       }
       var op = +r.opinion; if (op && isFinite(op)) opinion(clampN(op, -6, 6), 'something they said');
       if (op > 1) warm(0.08 * op, 'something you said'); else if (op < -1) heat(-0.08 * op, 'something you said');
+      if (r.face === 'shock') { if (!shockFace(/furious|angry|fury|rage|激/.test(String(r.emotion || '')) ? 'fury' : 'shock')) r.face = 'surprised'; else r.face = null; }
       say(text, r.face, act);
+      if (r.offer && OFFERS.indexOf(r.offer) >= 0) setTimeout(function () { offer(r.offer, null, 'asked'); }, 1200);
       if (r.mood && MOOD_LABEL[r.mood] && S.day && r.mood !== S.day.mood) {
         S.day.shifts = (S.day.shifts || []).concat([{ at: Date.now(), from: S.day.mood, to: r.mood, why: String(r.mood_reason || 'something you said').slice(0, 80) }]).slice(-6);
         S.day.mood = r.mood; S.day.reason = String(r.mood_reason || S.day.reason || '').slice(0, 120) || null; applyTemper(); emit('feel');
       }
-      if (r.complete) complete(String(r.complete), true);
+      if (r.complete) complete(r.complete === true ? 'true' : String(r.complete), true);
       if (r.drop_mission) drop(String(r.drop_mission));
-      if (r.mission && r.mission.text) addMission(r.mission);
+      if (r.change_mission && typeof r.change_mission === 'object') changeMission(r.change_mission);
+      if (r.reminded) S.lastNag = Date.now();
+      if (r.mission && r.mission.text && addMission(r.mission)) S.lastNag = Date.now();
       if (r.city && typeof r.city === 'string' && (!S.loc || S.loc.manual || !S.loc.city)) { S.loc = { city: r.city.slice(0, 40), country: '', manual: true, at: Date.now() }; emit('loc'); }
       if (r.go === 'inside' || r.go === 'outside') setTimeout(function () { goPlace(r.go === 'inside' ? 'house' : 'garden', true); }, 2500);
       if (Array.isArray(r.moves) && r.moves.length) BODY.perform(r.moves.map(function (m) { return String(m).toLowerCase().replace(/[\s-]+/g, '_'); }));
       if (r.timer && +r.timer.in_seconds > 0 && r.timer.say) addTimer(+r.timer.in_seconds, String(r.timer.say));
+      if (r.birthday && /^\d{2}-\d{2}$/.test(String(r.birthday))) { S.bday = String(r.birthday); remember('Their birthday is ' + S.bday + ' (month-day).', 3); }
       save();
     }
     var COMMANDS = [
@@ -818,9 +963,44 @@
       say(pickL(LINES.doMove), tm === 'kind' || tm === 'delighted' ? 'content' : null);
       return true;
     }
+    function negotiateBed(m, want, text) {
+      var b = bedTs(want); if (!b) return say(LINES.generic[0]);
+      var diff = Math.round((b - m.bed) / 60000);
+      if (diff <= 0) { changeMission({ id: m.id, bedtime: want }); return say(fill(pickL(LINES.deal.yes), { t: hhmm(new Date(b)) }), 'content'); }
+      if (m.deals) return sayL(LINES.deal.again, 'annoyed');
+      var reason = /because|since|exam|work|homework|study|friend|family|movie|film|game|parce que|car |devoir|examen|travail|amis|famille|から|ので|試験|宿題|仕事|友達|家族/i.test(text);
+      var score = ({ delighted: 0.7, kind: 0.55, calm: 0.35, sad: 0.5, dismissive: 0.15, grumpy: 0.05 })[temper()] + (S.op - 50) / 200 + (reason ? 0.25 : 0) - (diff > 60 ? 0.25 : 0) - (S.streak ? 0 : 0.1);
+      var roll = Math.random();
+      if (roll < score) { changeMission({ id: m.id, bedtime: want, pts: diff > 30 ? m.pts - 5 : m.pts }); opinion(0.5); return say(fill(pickL(LINES.deal.yes), { t: hhmm(new Date(b)) }), 'content'); }
+      if (roll < score + 0.3 && diff >= 20 && temper() !== 'grumpy') {
+        var half = new Date(m.bed + Math.round(diff / 2 / 15) * 15 * 60000); changeMission({ id: m.id, bedtime: hhmm(half) });
+        return say(fill(pickL(LINES.deal.counter), { t: hhmm(half) }), 'neutral');
+      }
+      return sayL(LINES.deal.no, temper() === 'grumpy' ? 'annoyed' : 'neutral');
+    }
     function localReply(text) {
       var t = text.toLowerCase(), m;
+      for (var xi = 0; xi < EXT.local.length; xi++) { try { if (EXT.local[xi](text, t)) return; } catch (e) { console.error(e); } }
       if (bodyCommand(t)) return;
+      // asking to move bedtime without a brain: she decides from her mood and how much she trusts you
+      var sm = open().filter(function (x) { return x.kind === 'sleep' && x.bed; })[0], want = null, wm;
+      if (sm && /later|instead|push|move|extend|plus tard|à la place|repousse|décal|minuit|midnight|遅く|かわり|代わり|延ばし|ずらし|にして/i.test(text)) {
+        if (/minuit|midnight|真夜中/i.test(text)) want = '00:00';
+        else if ((wm = /(\d{1,2})(?:[:h時](\d{2})?)/.exec(text))) want = pad(+wm[1] % 24) + ':' + (wm[2] || '00');
+      }
+      if (want) return negotiateBed(sm, want, text);
+      var bm = /(?:birthday|anniversaire|誕生日)[^\d]{0,20}(\d{1,2})[\/\s.\-月]+(\d{1,2})|(\d{1,2})(?:st|nd|rd|th)? (?:of )?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|janv|févr|mars|avr|mai|juin|juil|août|sept|oct|nov|déc)/i.exec(text);
+      if (bm && /birthday|anniversaire|誕生日/i.test(text)) {
+        var MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12, janv: 1, 'févr': 2, mars: 3, avr: 4, mai: 5, juin: 6, juil: 7, 'août': 8, sept: 9, 'déc': 12 };
+        var mo, dy; if (bm[1]) { if (/誕生日/.test(text) || /^en|^ja/.test(navigator.language || 'en')) { mo = +bm[1]; dy = +bm[2]; } else { dy = +bm[1]; mo = +bm[2]; } } else { dy = +bm[3]; mo = MON[bm[4].toLowerCase()]; }
+        if (mo >= 1 && mo <= 12 && dy >= 1 && dy <= 31) { S.bday = pad(mo) + '-' + pad(dy); save(); remember('Their birthday is ' + S.bday + ' (month-day).', 3); return say(fill(pickL(LINES.events.bdayKnown), { d: JA ? mo + '月' + dy + '日' : new Date(2000, mo - 1, dy).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }) }), 'content'); }
+      }
+      var ask = /(hug|câlin|calin|ハグ|抱きしめ)/i.test(text) ? 'hug' : /(high ?five|tope|ハイタッチ)/i.test(text) ? 'highfive' : /(hold (my )?hand|ta main|main dans la main|手をつな|手つな)/i.test(text) ? 'hand' : /(pinky|petit doigt|指切り|ゆびきり)/i.test(text) ? 'pinky' : null;
+      if (ask && /\?|can i|could i|may i|give me|je peux|tu veux|して|ちょうだい|いい？|please|stp|s'il te pla[iî]t/i.test(text)) {
+        var tm0 = temper(), li0 = levelIdx(S.op), yes0 = !(tm0 === 'grumpy' && li0 < 9) && !(tm0 === 'dismissive' && li0 < 7) && li0 >= (ask === 'highfive' ? 3 : ask === 'hug' ? 5 : 7);
+        if (yes0 && offer(ask, pickL(LINES.offer.agree[ask] || LINES.offer.agree.any), 'asked')) return;
+        return sayL(LINES.offer.refuse, 'away');
+      }
       if ((m = /(?:my name is|i'?m called|call me|je m'?appelle|appelle[- ]moi|名前は|僕は|私は|俺は)\s*([^\s,.!?、。！？]{2,20}?)(?:です|だよ|って呼んで|と申します|$|[\s,.!?、。！？])/i.exec(text))) { S.name = m[1]; save(); emit('name'); opinion(1); return sayL(LINES.named, 'content'); }
       if (isLate() && !isExcused()) {
         if (/work|shift|exam|study|insomnia|can'?t sleep|sick|baby|flight|travel|boulot|travail|examen|r[ée]vis|malade|insomnie|dors pas|bébé|bebe|vol\b|仕事|バイト|試験|テスト|勉強|眠れない|病気|赤ちゃん|フライト|旅行/.test(t)) { S.excuse = { day: herDay(), text: text.slice(0, 120) }; save(); return sayL(LINES.excuseOk, 'neutral'); }
@@ -884,6 +1064,7 @@
       ev.forEach(function (e) {
         var v = vars({ m: e[1].text.toLowerCase(), bed: e[1].bedLabel });
         if (e[0] === 'caught') queue.push([fill(pickL(LINES.caught), v), 'annoyed', 'sulk']);
+        else if (e[0] === 'caughtScreen') queue.push([fill(pickL(LINES.sleep.caught), Object.assign(v, { t: hhmm(new Date(e[1].screenUntil)) })), 'annoyed', 'sulk']);
         else if (e[0] === 'slept') queue.push([fill(pickL(LINES.slept), v), 'happy', 'sparkle']);
         else if (e[0] === 'dark') { drop(e[1].id); queue.push([fill(LINES.dropDark[0], v), null]); }
         else if (e[0] === 'screenOk') queue.push([fill(pickL(LINES.screenOk), v), 'happy', 'sparkle']);
@@ -896,6 +1077,8 @@
         queue.push([fill(pickL(LINES.late), vars()), 'annoyed', null, function () { return !isExcused(); }]);
       }
       refreshScreen();
+      lifeArrive(queue, away, first);
+      EXT.arrive.forEach(function (fn) { try { fn(queue, away, first); } catch (e) { console.error(e); } });
       var al = alarmReport(); if (al) queue.push(al);
       var wk = al ? null : wakeCheck(); if (wk) queue.push(wk);
       var an = android();
@@ -990,10 +1173,12 @@
                 66: 'freezing rain', 67: 'freezing rain', 71: 'light snow', 73: 'snow', 75: 'heavy snow', 77: 'snow grains', 80: 'rain showers', 81: 'rain showers', 82: 'violent rain showers', 85: 'snow showers', 86: 'snow showers', 95: 'thunderstorm', 96: 'thunderstorm with hail', 99: 'thunderstorm with hail' };
     function locCfg() { return lsGet('pusheen.loc') || { on: false }; }
     function weatherAt(lat, lon) {
-      return fetch('https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon + '&current=temperature_2m,weather_code,is_day&timezone=auto')
+      return fetch('https://api.open-meteo.com/v1/forecast?latitude=' + (+lat).toFixed(2) + '&longitude=' + (+lon).toFixed(2) + '&current=temperature_2m,weather_code,is_day&daily=sunrise,sunset&forecast_days=1&timezone=auto')
         .then(function (r) { return r.json(); }).then(function (j) {
           var c = j && j.current; if (!c) return;
-          WEATHER = { temp: Math.round(c.temperature_2m), desc: WMO[c.weather_code] || 'unknown weather', code: c.weather_code, at: Date.now() }; emit('loc');
+          WEATHER = { temp: Math.round(c.temperature_2m), desc: WMO[c.weather_code] || 'unknown weather', code: c.weather_code, at: Date.now() };
+          var dl = j.daily; if (dl && dl.sunrise && dl.sunset) { var hm2 = function (iso) { var m = /T(\d\d):(\d\d)/.exec(iso || ''); return m ? +m[1] + m[2] / 60 : null; }; WEATHER.rise = hm2(dl.sunrise[0]); WEATHER.set = hm2(dl.sunset[0]); }
+          applyWorld(); emit('loc');
         });
     }
     function refreshLocation(fromUser) {
@@ -1010,12 +1195,13 @@
       locBusy = true;
       return new Promise(function (res) {
         navigator.geolocation.getCurrentPosition(function (pos) {
-          var lat = pos.coords.latitude.toFixed(2), lon = pos.coords.longitude.toFixed(2);   // about 1 km precision, never stored
+          var lat = pos.coords.latitude, lon = pos.coords.longitude, acc = Math.round(pos.coords.accuracy || 0);
           var prevCity = S.loc && S.loc.city;
-          fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?localityLanguage=en&latitude=' + lat + '&longitude=' + lon).then(function (r) { return r.json(); })
+          gotPosition(lat, lon, acc, pos.coords.speed);
+          reverseGeo(lat, lon)
             .then(function (j) {
-              var city = j.city || j.locality || j.principalSubdivision || '';
-              if (city) { S.loc = { city: city, country: j.countryName || '', manual: false, at: Date.now() }; save(); emit('loc'); }
+              var city = j.city || '';
+              if (city) { S.loc = { city: city, country: j.country || '', street: j.street || '', area: j.area || '', spot: j.spot || '', manual: false, at: Date.now(), lat: +lat.toFixed(5), lon: +lon.toFixed(5), acc: acc }; save(); emit('loc'); }
               if (city && city !== prevCity) {
                 remember((prevCity ? 'They moved from ' + prevCity + ' to ' : 'They are in ') + city + (j.countryName ? ', ' + j.countryName : '') + '.', 2);
                 if (fromUser || prevCity) setTimeout(function () { say(fill(T(prevCity ? 'You\'re in {city} now? ‖ …Huh. Far from {prev}.' : 'So you\'re in {city}. ‖ …I\'ll remember that.'), { city: city, prev: prevCity }), 'content'); }, 900);
@@ -1023,9 +1209,351 @@
               return weatherAt(lat, lon);
             }).catch(function () {}).then(function () { locBusy = false; res(true); });
         }, function (err) { locBusy = false; if (fromUser) emit('note', { text: err && err.code === 1 ? 'Location was refused. You can allow it in your phone settings, or type your city instead.' : 'Couldn\'t get your location right now.' }); res(false); },
-        { enableHighAccuracy: false, maximumAge: 30 * 60000, timeout: 15000 });
+        { enableHighAccuracy: true, maximumAge: 4 * 60000, timeout: 20000 });
       });
     }
+    // exact address (street, neighbourhood) from OpenStreetMap, city-level from BigDataCloud if that fails
+    function reverseGeo(lat, lon) {
+      var lang = JA ? 'ja' : (navigator.language || 'en').slice(0, 2);
+      return fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&accept-language=' + lang + '&lat=' + lat.toFixed(6) + '&lon=' + lon.toFixed(6))
+        .then(function (r) { return r.json(); }).then(function (j) {
+          var a = j && j.address; if (!a) throw 0;
+          return { city: a.city || a.town || a.village || a.municipality || a.county || '', country: a.country || '', street: a.road || a.pedestrian || a.footway || '', area: a.neighbourhood || a.suburb || a.quarter || a.city_district || '',
+                   spot: j.name && j.name !== a.road ? j.name : '' };
+        }).catch(function () {
+          return fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?localityLanguage=en&latitude=' + lat.toFixed(3) + '&longitude=' + lon.toFixed(3)).then(function (r) { return r.json(); })
+            .then(function (j) { return { city: j.city || j.locality || j.principalSubdivision || '', country: j.countryName || '', street: '', area: '' }; });
+        });
+    }
+    function distM(a, b, c, d) { var R0 = 6371000, r = Math.PI / 180, x = (d - b) * r * Math.cos((a + c) / 2 * r), y = (c - a) * r; return Math.sqrt(x * x + y * y) * R0; }
+    // places you named: home, school… she notices when you come and go
+    function placeAt(lat, lon) { var best = null; (S.places || []).forEach(function (p) { var dd = distM(lat, lon, p.lat, p.lon); if (dd <= (p.r || 150) && (!best || dd < best.d)) best = { p: p, d: dd }; }); return best && best.p; }
+    function placeEvent(id, kind, at) {
+      S.placeLog = (S.placeLog || []).concat([{ id: id, kind: kind, at: at || Date.now() }]).slice(-60);
+      if (kind === 'enter') S.placeNow = id; else if (S.placeNow === id) S.placeNow = null;
+    }
+    function gotPosition(lat, lon, acc, speed) {
+      var p = placeAt(lat, lon), cur = S.placeNow || null;
+      if ((p && p.id) !== cur) { if (cur) placeEvent(cur, 'exit'); if (p) placeEvent(p.id, 'enter'); save(); emit('loc'); }
+      if (speed != null && speed > 7) MOVE.vehicleAt = Date.now();
+    }
+    function addPlace(name, kind) {
+      if (!S.loc || S.loc.lat == null) return false;
+      S.places = (S.places || []).filter(function (p) { return p.name.toLowerCase() !== String(name).toLowerCase(); });
+      var p = { id: newId('p'), name: String(name).slice(0, 30), kind: kind || 'other', lat: S.loc.lat, lon: S.loc.lon, r: Math.max(90, Math.min(300, (S.loc.acc || 60) * 1.6)) };
+      S.places.push(p); S.places = S.places.slice(-12); placeEvent(p.id, 'enter'); save(); syncPlaces(); emit('loc');
+      remember((kind === 'home' ? 'I know where they live now.' : 'They told me a place: ' + p.name + '.'), kind === 'home' ? 2 : 1);
+      return p;
+    }
+    function removePlace(id) { S.places = (S.places || []).filter(function (p) { return p.id !== id; }); if (S.placeNow === id) S.placeNow = null; save(); syncPlaces(); emit('loc'); }
+    function placeName(id) { var p = (S.places || []).filter(function (x) { return x.id === id; })[0]; return p ? p.name : null; }
+    function syncPlaces() {
+      var an = android(); if (!an || !an.setPlaces) return;
+      try { an.setPlaces(JSON.stringify((S.places || []).map(function (p) { return { id: p.id, name: p.name, kind: p.kind, lat: p.lat, lon: p.lon, r: p.r }; }))); } catch (e) {}
+      try { an.setPlaceLines && an.setPlaceLines(JSON.stringify({ home: LINES.place.welcome })); } catch (e) {}
+    }
+    function readPlaceLog() {
+      var an = android(); if (!an || !an.placeLog) return [];
+      var evs = []; try { evs = JSON.parse(an.placeLog() || '[]'); } catch (e) {}
+      evs.forEach(function (e) { if ((S.places || []).some(function (p) { return p.id === e.id; })) placeEvent(e.id, e.kind, e.at); });
+      if (evs.length) save();
+      return evs;
+    }
+    function whereText() {
+      var L = S.loc; if (!L || !L.city) return null;
+      var pn = S.placeNow && placeName(S.placeNow), home = (S.places || []).filter(function (p) { return p.kind === 'home'; })[0], bits = [];
+      if (pn) bits.push('at ' + pn);
+      if (L.street) bits.push((pn ? '' : 'on ') + L.street);
+      if (L.spot) bits.push('near ' + L.spot);
+      if (L.area) bits.push(L.area);
+      bits.push(L.city + (L.country ? ', ' + L.country : ''));
+      var t = bits.filter(Boolean).join(', ');
+      if (home && !pn && L.lat != null) t += ' (' + (distM(L.lat, L.lon, home.lat, home.lon) / 1000).toFixed(1) + ' km from home)';
+      return t + (L.manual ? ' (they told you)' : ' (from their phone, ' + ago(Date.now() - L.at) + ' ago)');
+    }
+
+    // ---------- her body knows yours: steps, sleep, battery, headphones, calls, calendar, unread messages ----------
+    var MOVE = { last: null, rate: 0, vehicleAt: 0 }, BAT = null, PHONES = false, CALL = false, UNREAD = null, sensesT = 0;
+    function an_() { return android(); }
+    function jsonOf(fn) { try { var v = fn(); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+    function readSteps() {
+      var an = an_(); if (!an || !an.steps) return null;
+      var j = jsonOf(function () { return an.steps(); }); if (!j || j.today == null) return null;
+      var now = Date.now(), n = Math.max(0, Math.round(j.today)), d = herDay();
+      if (MOVE.last && MOVE.last.day === d) { var dm = (now - MOVE.last.at) / 60000; if (dm > 0.3) MOVE.rate = Math.max(0, (n - MOVE.last.n) / dm); }
+      MOVE.last = { n: n, at: now, day: d };
+      S.steps = { day: d, n: n, at: now }; S.stepsHist = S.stepsHist || {}; S.stepsHist[d] = n;
+      var ks = Object.keys(S.stepsHist).sort(); if (ks.length > 21) delete S.stepsHist[ks[0]];
+      // walking missions finish themselves
+      open().forEach(function (m) {
+        if (m.kind !== 'move' || m.steps0 == null || m.stepDay !== d) return;
+        var need = /run|cours|走/i.test(m.text) ? 2500 : /stretch|étire|ストレッチ/i.test(m.text) ? Infinity : 1800;
+        if (n - m.steps0 >= need) { complete(m.id, true); say(fill(pickL(LINES.steps.auto), { n: (n - m.steps0).toLocaleString() }), 'happy', 'sparkle'); }
+      });
+      return n;
+    }
+    function activityNow() {
+      if (Date.now() - MOVE.vehicleAt < 3 * 60000 && MOVE.rate < 30) return 'in a car, bus or train';
+      if (MOVE.rate > 130) return 'running'; if (MOVE.rate > 45) return 'walking'; return null;
+    }
+    function readSleep() {
+      var an = an_(); if (!an || !an.sleepLast) return null;
+      var j = jsonOf(function () { return an.sleepLast(); }); if (!j || !j.slept || !j.woke) return null;
+      var key = herDay(j.woke); S.sleepHist = S.sleepHist || {};
+      S.sleepHist[key] = { slept: j.slept, woke: j.woke, h: +((j.woke - j.slept) / 3600e3).toFixed(1) };
+      var ks = Object.keys(S.sleepHist).sort(); if (ks.length > 21) delete S.sleepHist[ks[0]];
+      return S.sleepHist[key];
+    }
+    function lastSleep() { var ks = Object.keys(S.sleepHist || {}).sort(); return ks.length ? S.sleepHist[ks[ks.length - 1]] : null; }
+    function readBattery() {
+      var an = an_();
+      if (an && an.battery) { var j = jsonOf(function () { return an.battery(); }); if (j) return Promise.resolve(j); }
+      if (navigator.getBattery) return navigator.getBattery().then(function (b) { return { level: Math.round(b.level * 100), charging: b.charging }; }).catch(function () { return null; });
+      return Promise.resolve(null);
+    }
+    function senseTick(first) {
+      var an = an_(), now = Date.now();
+      readBattery().then(function (b) {
+        if (!b) return; var was = BAT; BAT = { level: b.level, charging: !!b.charging, at: now };
+        if (first || document.hidden) return;
+        if (was && !was.charging && BAT.charging) { feel('cozy', 30); if (chance(0.5)) say(pickL(LINES.battery.charging), 'sleepy'); }
+        else if (!BAT.charging && BAT.level <= 15 && now - (S.batNag || 0) > 2 * 3600e3) { S.batNag = now; feel('sleepy', 60); BODY.perform(['stretch']); say(fill(pickL(BAT.level <= 5 ? LINES.battery.dying : LINES.battery.low), { n: BAT.level }), 'sleepy'); }
+      });
+      if (!an) return;
+      var hp = false; try { hp = !!(an.headphones && an.headphones()); } catch (e) {}
+      if (hp !== PHONES) { PHONES = hp; emit('senses'); if (hp && !first && chance(0.6)) setTimeout(function () { say(pickL(LINES.phones.on), 'content'); }, 600); }
+      readSteps(); if (first) readSleep();
+      if (first || now - sensesT > 5 * 60000) {
+        sensesT = now;
+        var u = jsonOf(function () { return an.unread && an.unread(); });
+        if (u && Array.isArray(u)) {
+          UNREAD = u.filter(function (x) { return x && x.n > 0; }).sort(function (a, b) { return b.n - a.n; }).slice(0, 5);
+          var tot = UNREAD.reduce(function (a, x) { return a + x.n; }, 0), top = UNREAD[0];
+          if (!first && top && (tot >= 25 || top.n >= 12) && now - (S.unreadNag || 0) > 3 * 3600e3) { S.unreadNag = now; say(fill(pickL(LINES.unread), { n: top.n, app: top.app, total: tot }), null); }
+        }
+        var cal = jsonOf(function () { return an.calendar && an.calendar(2); });
+        if (cal && Array.isArray(cal)) { S.cal = cal.slice(0, 12).map(function (e) { return { id: String(e.id), title: String(e.title || '').slice(0, 60), start: e.start, end: e.end, allDay: !!e.allDay }; }); calCheck(first); }
+      }
+    }
+    function callTick() {
+      var an = an_(); if (!an || !an.inCall || document.hidden) return;
+      var c = false; try { c = !!an.inCall(); } catch (e) {}
+      if (c === CALL) return; CALL = c; emit('senses');
+      if (c) { BODY.perform(['look_left']); feel('quiet', 120); note('went quiet because you were on a call'); }
+      else if (chance(0.35)) setTimeout(function () { say(pickL(LINES.call.after), null); }, 1500);
+    }
+    function calCheck(first) {
+      var now = Date.now(); S.calAsked = S.calAsked || {};
+      (S.cal || []).forEach(function (e) {
+        if (S.calAsked[e.id]) return;
+        if (!e.allDay && e.end < now && now - e.end < 8 * 3600e3) { S.calAsked[e.id] = 1; setTimeout(function () { say(fill(pickL(LINES.cal.after), { e: e.title }), 'content'); }, first ? 9000 : 500); }
+        else if (!e.allDay && e.start > now && e.start - now < 75 * 60000 && !S.calAsked['pre' + e.id]) { S.calAsked['pre' + e.id] = 1; setTimeout(function () { say(fill(pickL(LINES.cal.soon), { e: e.title, t: hhmm(new Date(e.start)) }), 'neutral'); }, first ? 7000 : 500); }
+      });
+      var ks = Object.keys(S.calAsked); if (ks.length > 80) ks.slice(0, ks.length - 80).forEach(function (k) { delete S.calAsked[k]; });
+    }
+    function calText() {
+      var now = Date.now(), ev = (S.cal || []).filter(function (e) { return e.end > now - 6 * 3600e3 && e.start < now + 36 * 3600e3; });
+      if (!ev.length) return null;
+      return ev.slice(0, 6).map(function (e) { return '"' + e.title + '" ' + (e.allDay ? 'all day ' + (herDay(e.start) === herDay() ? 'today' : 'tomorrow') : (e.end < now ? '(ended ' + hhmm(new Date(e.end)) + ')' : e.start < now ? '(now, until ' + hhmm(new Date(e.end)) + ')' : (herDay(e.start) === herDay() ? 'today ' : 'tomorrow ') + hhmm(new Date(e.start)))); }).join('; ');
+    }
+
+    // ---------- special days ----------
+    var TSUKIMI = { 2026: '09-25', 2027: '09-15', 2028: '10-03', 2029: '09-22', 2030: '09-12', 2031: '10-01', 2032: '09-19' };
+    function eventsToday(d) {
+      d = d || new Date(); var m = d.getMonth() + 1, day = d.getDate(), md = pad(m) + '-' + pad(day), out = [];
+      if (m === 1 && day <= 3) out.push('newyear');
+      if (md === '02-03') out.push('setsubun'); if (md === '02-14') out.push('valentine'); if (md === '03-14') out.push('whiteday');
+      if ((m === 3 && day >= 25) || (m === 4 && day <= 10)) out.push('hanami');
+      if (md === '07-07') out.push('tanabata');
+      if (m === 8 && day >= 13 && day <= 16) out.push('obon');
+      if (TSUKIMI[d.getFullYear()] === md) out.push('tsukimi');
+      if (md === '10-31') out.push('halloween');
+      if (m === 12 && (day === 24 || day === 25)) out.push('christmas');
+      if (md === '12-31') out.push('omisoka');
+      if (S.bday && S.bday === md) out.push('birthday');
+      var met = new Date(S.born || Date.now());
+      if (S.flags.met && pad(met.getMonth() + 1) + '-' + pad(met.getDate()) === md && d.getFullYear() > met.getFullYear()) out.push('anniversary');
+      EXT.events.forEach(function (fn) { try { (fn(d) || []).forEach(function (e) { if (out.indexOf(e) < 0) out.push(e); }); } catch (e2) {} });
+      return out;
+    }
+
+    // ---------- her own day: what she does, wears and holds ----------
+    var BOOKS = ['Kokoro', 'I Am a Cat', 'Botchan', 'The Tale of Genji', 'Rashōmon', 'Pride and Prejudice', 'Moby-Dick', 'The Pillow Book', 'Hōjōki', 'Frankenstein', 'Jane Eyre', 'Little Women', 'Night on the Galactic Railroad', 'The Little Prince'];
+    function daySeed() { var k = herDay(), h = 0; for (var i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0; return h; }
+    function routineNow() {
+      for (var xr = 0; xr < EXT.routine.length; xr++) { var ov = EXT.routine[xr](); if (ov) return ov; }
+      var h = hourOf(), sd = daySeed(), wk = SCENE.weather(), plants = ['fern', 'hydrangea', 'sunflower', 'bonsai', 'sapling'].some(function (k) { return S.owned[k]; });
+      var hot = WEATHER ? WEATHER.temp >= 29 : SCENE.season() === 'summer' && h > 12 && h < 16;
+      if (h >= 23 || h < 6.5) return { id: 'sleep', prop: null };
+      if (h < 7.5) return { id: 'wake', prop: null };
+      if (h < 8.5) return { id: 'tea', prop: 'tea' };
+      if (h < 11) return { id: 'read', prop: 'read' };
+      if (h < 12) return plants && wk !== 'rain' && wk !== 'storm' ? { id: 'water', prop: 'water' } : { id: 'gaze', prop: null };
+      if (h < 13) return { id: 'lunch', prop: 'tea' };
+      if (h < 14.5) return sd % 2 ? { id: 'nap', prop: null } : { id: hot ? 'fan' : 'read', prop: hot ? 'fan' : 'read' };
+      if (h < 16.5) return { id: sd % 3 ? 'sketch' : 'read', prop: sd % 3 ? 'sketch' : 'read' };
+      if (h < 18) return { id: hot ? 'fan' : 'read', prop: hot ? 'fan' : 'read' };
+      if (h < 19) return { id: 'sunset', prop: null };
+      if (h < 20) return { id: 'dinner', prop: 'tea' };
+      return { id: 'read', prop: 'read' };
+    }
+    function book() {
+      if (!S.book || S.book.done) S.book = { title: pickL(BOOKS.filter(function (b) { return !S.book || b !== S.book.title; })), page: 1, pages: 180 + Math.floor(Math.random() * 300), at: Date.now() };
+      return S.book;
+    }
+    var ROUTINE = { id: null };
+    function applyWorld() {
+      if (WEATHER && WEATHER.rise != null) SCENE.setSun(WEATHER.rise, WEATHER.set); else SCENE.setSun(null);
+      SCENE.setWeather(WEATHER ? { code: WEATHER.code, temp: WEATHER.temp } : null);
+      var ev = eventsToday(); SCENE.setEvents(ev);
+      var h = hourOf(), wk = SCENE.weather(), outside = BODY.place !== 'house', season = SCENE.season();
+      var temp = WEATHER ? WEATHER.temp : season === 'winter' ? 4 : season === 'summer' ? 28 : 16;
+      BODY.wear({ scarf: temp <= 8, straw: temp >= 25 && h > 9 && h < 18 && outside && !ev.some(function (e) { return e === 'obon' || e === 'tanabata'; }),
+                  yukata: ev.indexOf('obon') >= 0 || ev.indexOf('tanabata') >= 0, party: ev.indexOf('birthday') >= 0 || ev.indexOf('anniversary') >= 0,
+                  umbrella: outside && (wk === 'rain' || wk === 'drizzle' || wk === 'storm') });
+    }
+    function routineTick() {
+      if (document.hidden) return;
+      applyWorld();
+      var r = routineNow(), busyNow = UIBUSY_B() || Date.now() - lastPlayerAt < 60000;
+      if (r.id !== ROUTINE.id) { ROUTINE = { id: r.id, since: Date.now() }; }
+      if (r.id === 'read') { var b = book(); var mins = (Date.now() - (b.at || Date.now())) / 60000; if (mins > 3) { b.page = Math.min(b.pages, b.page + Math.round(mins / 3)); b.at = Date.now(); if (b.page >= b.pages) { b.done = true; remember('I finished reading ' + b.title + '.', 1); } } }
+      BODY.activity(busyNow ? null : r.prop);
+      if (r.id === 'nap' && !busyNow && BODY.state === 'awake' && Date.now() - lastTouch > 4 * 60000 && chance(0.3)) BODY.perform(['nap']);
+    }
+    function routineText() {
+      var r = routineNow(), b = S.book;
+      return { wake: 'just woke up, stretching', tea: 'having morning tea', read: 'reading' + (b && !b.done ? ' "' + b.title + '" (page ' + b.page + ' of ' + b.pages + ')' : ''), water: 'watering your plants', gaze: 'watching the lake',
+               study: 'studying at your desk with them (focus timer)', sick: 'resting in bed with a cold',
+               lunch: 'having lunch', nap: 'it\'s your nap time', fan: 'fanning yourself, it\'s hot', sketch: 'sketching in your sketchbook', sunset: 'watching the sunset', dinner: 'having dinner and tea', sleep: 'it\'s your sleeping time' }[r.id];
+    }
+
+    // ---------- her diary: a few lines each night; you can only read it if she trusts you ----------
+    function dayEvents(d) {
+      var t0 = new Date(d + 'T05:00:00').getTime(), t1 = t0 + 864e5, ev = [];
+      S.missions.forEach(function (m) { if (m.end >= t0 && m.end < t1) ev.push(m.status + ' "' + m.text + '"'); });
+      S.log.forEach(function (l) { if (l.at >= t0 && l.at < t1 && l.who === 'p') ev.push('they said: ' + l.text.slice(0, 60)); });
+      (S.placeLog || []).forEach(function (e) { if (e.at >= t0 && e.at < t1) ev.push((e.kind === 'enter' ? 'arrived at ' : 'left ') + (placeName(e.id) || 'a place') + ' ' + hhmm(new Date(e.at))); });
+      if (S.stepsHist && S.stepsHist[d]) ev.push(S.stepsHist[d] + ' steps');
+      return ev.slice(-25);
+    }
+    function writeDiary(d) {
+      S.diary = S.diary || [];
+      if (S.diary.some(function (x) { return x.day === d; })) return;
+      var md = S.day && S.day.date === d ? S.day : null, ev = dayEvents(d);
+      var entry = { day: d, mood: md ? md.mood : null, text: '' };
+      var offline = function () {
+        var bits = [fill(pickL(LINES.diary.open), { mood: T(MOOD_LABEL[entry.mood] || 'calm') })];
+        if (md && md.reason) bits.push(fill(pickL(LINES.diary.reason), { r: md.reason }));
+        var done = ev.filter(function (x) { return /^done/.test(x); }).length, skipped = ev.filter(function (x) { return /^(skipped|missed)/.test(x); }).length;
+        if (done) bits.push(fill(pickL(LINES.diary.done), { n: done })); if (skipped) bits.push(pickL(LINES.diary.skipped));
+        if (!ev.some(function (x) { return /^they said/.test(x); })) bits.push(pickL(LINES.diary.quiet));
+        bits.push(pickL(LINES.diary.close));
+        return bits.join(' ').replace(/\s*‖\s*/g, ' ');
+      };
+      entry.text = offline(); S.diary.push(entry); S.diary = S.diary.slice(-60); save();
+      if (brainKind() === 'off') return;
+      var prompt = 'You are Pusheen (dry, calm, secretly caring; you live in a phone app garden). Write tonight\'s private diary entry about ' + d + ' in your own voice, 3 to 6 short sentences, honest, a little funny without trying. ' +
+        (JA ? 'Write in natural Japanese (plain form). ' : 'Write in English. ') +
+        'Your mood that day: ' + (entry.mood || 'calm') + (md && md.reason ? ' (because ' + md.reason + ')' : '') + '. What you think of them: "' + levelName(levelIdx(S.op)) + '". Things that happened: ' + (ev.join('; ') || 'nothing much') + '. Reply with JSON only: {"text": "the entry"}';
+      Promise.resolve().then(function () { return callAI(prompt, true, null, 500); }).then(function (r) { if (r && typeof r.text === 'string' && r.text.length > 20) { entry.text = r.text.slice(0, 900); save(); emit('mem'); } }).catch(function () {});
+    }
+    function diaryOpen() { return levelIdx(S.op) >= 10; }
+
+    // ---------- she texts you first, now and then, while you're away (phone app) ----------
+    function quietHour(ts) { var d = new Date(ts), h = d.getHours() + d.getMinutes() / 60, wake = S.wake ? +S.wake.split(':')[0] + (+S.wake.split(':')[1]) / 60 : 8; return h >= 23 || h < Math.max(6, wake + 0.3); }
+    function planTexts() {
+      var an = an_(); if (!an || !an.textAt) return;
+      try { an.cancelTexts && an.cancelTexts(); } catch (e) {}
+      var now = Date.now(), d = herDay(), sent = S.textsDay && S.textsDay.day === d ? S.textsDay.n : 0, plan = [];
+      [[2, 5], [6, 10]].forEach(function (w, i) {
+        if (sent + plan.length >= 3) return;
+        var at = now + (w[0] + Math.random() * (w[1] - w[0])) * 3600e3, tries = 0;
+        while (quietHour(at) && tries++ < 8) at += 3600e3;
+        if (quietHour(at) || (i && !chance(0.6))) return;
+        var tl = textLine(at), k = 0; while (plan.some(function (q) { return q.text === tl; }) && k++ < 6) tl = textLine(at);
+        plan.push({ at: at, text: tl });
+      });
+      S.textsPlanned = plan; save();
+      plan.forEach(function (p, i) { try { an.textAt(i, Math.round((p.at - now) / 1000), p.text.replace(/\s*‖\s*/g, ' ')); } catch (e) {} });
+      // with your own key she writes them herself (not too often)
+      if (plan.length && (brainKind() === 'openrouter' || brainKind() === 'anthropic') && now - (S.textsAI || 0) > 4 * 3600e3) {
+        S.textsAI = now;
+        var prompt = 'You are Pusheen. Stay in character (dry, calm, secretly caring). The player just closed the app. Write ' + plan.length + ' short text message(s) you will send them later, at ' + plan.map(function (p) { return hhmm(new Date(p.at)); }).join(' and ') +
+          ', like a real friend texting first: a small thought, a question, a check-in, something you noticed in your garden. Under 18 words each, no greetings like "Hello!". ' + (JA ? 'In natural casual Japanese. ' : '') +
+          'Context: ' + situation().split('\n').slice(0, 14).join(' ') + '\nReply with JSON only: {"texts": ["…"]}';
+        Promise.resolve().then(function () { return callAI(prompt, true, null, 300); }).then(function (r) {
+          var tx = r && Array.isArray(r.texts) ? r.texts : []; if (!tx.length) return;
+          plan.forEach(function (p, i) { if (typeof tx[i] === 'string' && tx[i].trim()) { p.text = tx[i].trim().slice(0, 160); try { an.textAt(i, Math.round((p.at - Date.now()) / 1000), p.text); } catch (e) {} } });
+          save();
+        }).catch(function () {});
+      }
+    }
+    function textLine(at) {
+      var h = new Date(at).getHours(), slot = h < 11 ? 'morning' : h < 17 ? 'day' : 'evening', pool = LINES.texts[slot].slice();
+      var om = open(); if (om.length) pool.push(fill(pickL(LINES.texts.mission), { m: om[0].text }));
+      if (S.study && S.study.week === weekKey()) pool.push(fill(pickL(LINES.texts.study), { topic: JA ? studyTopic(S.study).ja : studyTopic(S.study).en }));
+      if (hunger() > 0.6) pool.push(pickL(LINES.texts.hungry));
+      return fill(pickL(pool), vars());
+    }
+    function textsBack() {
+      var an = an_(), now = Date.now(), plan = S.textsPlanned || [];
+      try { an && an.cancelTexts && an.cancelTexts(); } catch (e) {}
+      var got = plan.filter(function (p) { return p.at <= now && p.at > (S.lastSeen || 0); });
+      got.forEach(function (p) { addLog('s', p.text.replace(/\s*‖\s*/g, ' '), { letter: true, texted: true, at: p.at }); });
+      if (got.length) { var d = herDay(); S.textsDay = { day: d, n: (S.textsDay && S.textsDay.day === d ? S.textsDay.n : 0) + got.length }; }
+      S.textsPlanned = []; save();
+      return got;
+    }
+
+    // what happened while you were away, for her greeting
+    function lifeArrive(queue, away, first) {
+      if (first) return;
+      var now = Date.now(), r = routineNow();
+      applyWorld();
+      var ev = eventsToday(), dk = herDay();
+      S.evSeen = S.evSeen || {};
+      ev.forEach(function (e) { if (!S.evSeen[dk + e] && LINES.events[e]) { S.evSeen[dk + e] = 1; queue.push([fill(pickL(LINES.events[e]), vars()), 'happy', 'sparkle']); } });
+      var sl = readSleep();
+      if (sl && S.sleepTold !== herDay(sl.woke) && now - sl.woke < 10 * 3600e3 && sl.h >= 2) {
+        S.sleepTold = herDay(sl.woke);
+        var hrs = sl.h, lateSl = new Date(sl.slept).getHours(); lateSl = lateSl < 12 ? lateSl + 24 : lateSl;
+        queue.push([fill(pickL(hrs < 6 ? LINES.sleep.short : lateSl >= 25 ? LINES.sleep.late : LINES.sleep.good), { t: hhmm(new Date(sl.slept)), w: hhmm(new Date(sl.woke)), h: hrs }), hrs < 6 ? 'down' : 'content']);
+      }
+      readPlaceLog();
+      var pl = (S.placeLog || []).filter(function (e) { return e.at > (S.lastSeen || 0) && e.at < now; });
+      var homeIn = pl.filter(function (e) { var p = (S.places || []).filter(function (x) { return x.id === e.id; })[0]; return p && p.kind === 'home' && e.kind === 'enter'; }).pop();
+      if (homeIn && now - homeIn.at < 6 * 3600e3) { var hh0 = new Date(homeIn.at).getHours(); queue.push([fill(pickL(hh0 >= 23 || hh0 < 4 ? LINES.place.homeLate : LINES.place.home), { t: hhmm(new Date(homeIn.at)) }), hh0 >= 23 || hh0 < 4 ? 'annoyed' : 'content']); }
+      if (away > 60 * 60000 && !queue.length && LINES.routine[r.id] && chance(0.6)) queue.push([fill(pickL(LINES.routine[r.id]), { book: S.book ? S.book.title : '', page: S.book ? S.book.page : '' }), null]);
+      if (now - (S.diaryCheck || 0) > 3600e3) { S.diaryCheck = now; var y = herDay(now - 864e5); if (S.lastSeen && S.lastSeen < new Date(dk + 'T05:00:00').getTime()) writeDiary(y); }
+      var tx = textsBack(); if (tx.length) queue.unshift([pickL(LINES.texts.back), null]);
+    }
+    function lifeStart() {
+      applyWorld(); syncPlaces(); senseTick(true);
+      setInterval(routineTick, 30000); setTimeout(routineTick, 4000);
+      setInterval(function () { if (!document.hidden) senseTick(false); }, 60000);
+      setInterval(callTick, 4000);
+      setInterval(function () { if (!document.hidden && locCfg().on) refreshLocation(false); }, 10 * 60000);
+      document.addEventListener('visibilitychange', function () { if (document.hidden) { planTexts(); } else { setTimeout(function () { senseTick(false); routineTick(); }, 1500); } });
+    }
+    function lifeLines() {
+      var out = [], wt = whereText(); if (wt) out.push('- Where they are: ' + wt + '.' + (WEATHER ? ' Weather there now: ' + WEATHER.temp + '°C, ' + WEATHER.desc + (WEATHER.rise != null ? '; sunrise ' + hhmm(new Date(new Date().setHours(Math.floor(WEATHER.rise), Math.round(WEATHER.rise % 1 * 60)))) + ', sunset ' + hhmm(new Date(new Date().setHours(Math.floor(WEATHER.set), Math.round(WEATHER.set % 1 * 60)))) : '') + '.' : ''));
+      var pl = (S.placeLog || []).filter(function (e) { return e.at > Date.now() - 18 * 3600e3; }).slice(-6);
+      if (pl.length) out.push('- Their comings and goings today: ' + pl.map(function (e) { return (e.kind === 'enter' ? 'arrived at ' : 'left ') + (placeName(e.id) || '?') + ' ' + hhmm(new Date(e.at)); }).join('; ') + '.');
+      if (S.steps && S.steps.day === herDay()) out.push('- Steps today: ' + S.steps.n + (activityNow() ? '; right now they seem to be ' + activityNow() : '') + '.');
+      var sl = lastSleep(); if (sl && Date.now() - sl.woke < 20 * 3600e3) out.push('- Last night (from their phone screen): asleep around ' + hhmm(new Date(sl.slept)) + ', up at ' + hhmm(new Date(sl.woke)) + ' (' + sl.h + ' h).');
+      if (BAT) out.push('- Their phone battery: ' + BAT.level + '%' + (BAT.charging ? ', charging' : '') + '. (Low battery makes you sleepy.)');
+      if (PHONES) out.push('- They have headphones in: speak a little more softly.');
+      if (CALL) out.push('- They are on a phone call right now: keep very quiet.');
+      if (UNREAD && UNREAD.length) out.push('- Unread notifications on their phone (counts only): ' + UNREAD.map(function (u) { return u.app + ' ' + u.n; }).join(', ') + '.');
+      var ct = calText(); if (ct) out.push('- Their calendar: ' + ct + '. You may wish them luck or ask how it went.');
+      var ev = eventsToday(); if (ev.length) out.push('- Today is special: ' + ev.join(', ') + '. Celebrate it your way.');
+      if (!S.bday && S.op > 30) out.push('- You don\'t know their birthday. You might ask casually one day (then set "birthday").');
+      var rt = routineText(); if (rt) out.push('- What you were doing on your own just now: ' + rt + '.');
+      var ft = (S.textsPlanned || []).length ? null : null; if (ft) out.push(ft);
+      return out;
+    }
+
     function setLocation(on) { var lc = locCfg(); lc.on = !!on; lsSet('pusheen.loc', lc); if (on) return refreshLocation(true); WEATHER = null; if (S.loc && !S.loc.manual) { S.loc = null; save(); } emit('loc'); return Promise.resolve(true); }
     function setCity(name) { name = String(name || '').trim().slice(0, 40); S.loc = name ? { city: name, country: '', manual: true, at: Date.now() } : null; WEATHER = null; save(); emit('loc'); if (name) refreshLocation(false); }
 
@@ -1085,6 +1613,7 @@
       shakeHits = shakeHits.filter(function (x) { return now - x < 1600; }); shakeHits.push(now);
       if (shakeHits.length >= 6 && now - lastDizzy > 4500) {
         lastDizzy = now; shakeHits = [];
+        if (S.day && S.day.rough >= 3 && chance(0.3)) shockFace('fury');
         BODY.dizzy(); feel('dizzy', 12); heat(temper() === 'kind' || temper() === 'delighted' ? 0.1 : 0.18, 'you shook the phone'); note('shook the whole phone');
         if (S.day) S.day.rough++;
         setTimeout(function () { touchSay(LINES.shook, 'annoyed'); }, 700);
@@ -1139,6 +1668,7 @@
     // ---------- hold your finger on her: hug, pat, tickle, high five, brush her hair, give a flower ----------
     var interactLog = {};
     function interact(kind) {
+      if (pendingOffer && (pendingOffer.kind === kind || (pendingOffer.kind === 'hand' && kind === 'hug'))) return answerOffer(true);
       var now = Date.now(), tm = temper(), li = levelIdx(S.op), late = isLate();
       if (BODY.state === 'fedUp') { touchSay(TOUCH.refuse, 'annoyed'); return; }
       if (BODY.state === 'asleep') BODY.wake();
@@ -1190,7 +1720,80 @@
       if (out[4]) warm(out[4], { hug: 'you hugged me', pat: 'you patted my head', tickle: 'you made me laugh', highfive: 'that high five', brush: 'you brushed my hair', flower: 'you gave me a flower' }[kind]);
       if (out[5]) heat(out[5], kind === 'tickle' ? 'you tickled me too much' : 'you hugged me when I didn\'t want it');
       feel(out[6], 20);
+      if (out[3] > 0) actMission(kind);
       lastTouchSay = 0; touchSay(out[0], out[1]);
+    }
+
+    // ---------- her rarest face: utter shock or fury (3–5 s, a few times a week at most) ----------
+    function shockFace(kind, force) {
+      var now = Date.now();
+      if (!force && now - (S.lastShock || 0) < 5 * 3600e3) return false;
+      S.lastShock = now; save(); BODY.shock(3 + Math.random() * 2, kind); buzz(kind === 'fury' ? [40, 60, 40, 60, 160] : [120]);
+      return true;
+    }
+
+    // ---------- she offers things herself: a hug, a high five, her hand, a pinky promise… or never, if that's not who she is ----------
+    var OFFERS = ['hug', 'highfive', 'pat', 'hand', 'pinky', 'play'], pendingOffer = null;
+    function touchy() { if (S.touchy == null) { var r = Math.random(); S.touchy = r < 0.15 ? 0 : r < 0.65 ? 0.5 : 1; save(); } return S.touchy; }   // 0: never offers on her own, 0.5: sometimes, 1: often
+    function offer(kind, line, why, game) {
+      if (OFFERS.indexOf(kind) < 0 || pendingOffer || BODY.state === 'fedUp') return false;
+      if (BODY.state === 'asleep') BODY.wake();
+      var at = Date.now(); pendingOffer = { kind: kind, at: at, why: why || 'own', game: game };
+      S.lastOffer = at; save();
+      BODY.offer(kind);
+      if (line) say(line, kind === 'hug' || kind === 'pat' ? 'content' : 'happy');
+      emit('offer', { kind: kind, why: pendingOffer.why, game: game });
+      setTimeout(function () { if (pendingOffer && pendingOffer.at === at) answerOffer(null); }, 30000);
+      return true;
+    }
+    function answerOffer(yes) {
+      var o = pendingOffer; if (!o) return; pendingOffer = null; BODY.offerEnd(); emit('offer', null);
+      var L = LINES.offer, tm = temper(), li = levelIdx(S.op), k = o.kind;
+      if (k === 'play') { if (yes) { emit('duo', { id: o.game }); opinion(0.3, 'they said yes to a game'); } else if (yes === false) { feel('sulky', 20); say(pickL(L.no.fine), 'away'); } else feel('bored', 20); return; }
+      if (yes) {
+        var big = { hug: 2.5, hand: 2, pinky: 1.5, pat: 1.5, highfive: 1 }[k];
+        opinion(big, 'they accepted when I offered'); warm(0.4, { hug: 'you hugged me back', hand: 'you held my hand', pinky: 'you made a promise with me', pat: 'you patted my head', highfive: 'that high five' }[k]);
+        feel({ hug: 'happy', hand: 'shy', pinky: 'pleased', pat: 'content', highfive: 'proud' }[k], 40);
+        BODY.perform({ hug: ['hug', 'blush'], hand: ['blush'], pinky: ['nod'], pat: ['nod', 'blush'], highfive: ['high_five', 'hop'] }[k]);
+        note({ hug: 'hugged you back when you offered', hand: 'took your hand when you offered', pinky: 'made a pinky promise with you', pat: 'patted your head when you asked', highfive: 'high-fived you' }[k]);
+        actMission(k);
+        if (k === 'hug' && !S.n.offerHugs) remember('I asked for a hug. They said yes.', 3);
+        S.n.offerHugs = (S.n.offerHugs || 0) + (k === 'hug' ? 1 : 0);
+        say(pickL(L.yes[k]), 'happy', null, { cut: true });
+      } else if (yes === false) {
+        var hurt = (k === 'hug' || k === 'hand' || k === 'pinky') && (tm === 'sad' || li >= 8);
+        opinion(hurt ? -1.5 : -0.3, 'they turned me down'); if (hurt) heat(0.15, 'you said no when I asked'); feel(hurt ? 'hurt' : 'indifferent', 40);
+        note('said no when you offered a ' + k);
+        say(pickL(hurt ? L.no.hurt : L.no.fine), hurt ? 'down' : 'away', hurt ? 'gloom' : null, { cut: true });
+      } else {
+        feel('sulky', 25); note('ignored you when you offered a ' + k);
+        say(pickL(L.ignored), 'away');
+      }
+      save();
+    }
+    // on her own, now and then — depends on who she is, her mood, and what you are to her
+    function maybeOffer() {
+      var now = Date.now(), tm = temper(), li = levelIdx(S.op), tc = touchy();
+      if (extMuted()) return false;
+      if (pendingOffer || now - (S.lastOffer || 0) < (tc >= 1 ? 2.5 : 5) * 3600e3 || now - lastPlayerAt > 5 * 60000) return false;
+      if (li >= 4 && tm !== 'grumpy' && tm !== 'sad' && now - (S.lastDuoAt || 0) > 6 * 3600e3 && chance(0.25)) {
+        var gid = pickL(['janken', 'tictac', 'connect', 'memory'].concat(brainKind() !== 'off' ? ['chain'] : []));
+        return offer('play', pickL(LINES.duo.propose[gid]), 'own', gid);
+      }
+      var doneRecently = S.missions.some(function (m) { return m.status === 'done' && now - m.end < 20 * 60000 && !m.fived; });
+      if (doneRecently && li >= 4 && chance(0.5)) { S.missions.forEach(function (m) { if (m.status === 'done') m.fived = true; }); return offer('highfive', pickL(LINES.offer.ask.highfive), 'mission'); }
+      if (!tc && li < 13) return false;
+      var p = tc * 0.25, kind = null;
+      if (tm === 'sad' && li >= 6) kind = chance(0.5) ? 'pat' : 'hug';
+      else if ((tm === 'kind' || tm === 'delighted') && li >= 8) kind = pickL(['hug', 'hand', 'hug', 'highfive']);
+      else if (li >= 10) kind = pickL(['hug', 'hand', 'pat']);
+      if (!kind || !chance(p)) return false;
+      return offer(kind, pickL(LINES.offer.ask[kind]), 'own');
+    }
+    // missions that are a gesture ("say goodnight with a hug") finish when you do it
+    function actMission(kind) {
+      var m = open().filter(function (x) { return x.act === kind; })[0];
+      if (m) setTimeout(function () { complete(m.id, true); say(pickL(LINES.offer.mission), 'happy', 'sparkle'); }, 2600);
     }
 
     // ---------- reacting to her body ----------
@@ -1217,8 +1820,9 @@
       }
       if (type === 'buzz') buzz(d.ms || [80]);
       if (type === 'hold') emit('holdmenu', d);
-      if (type === 'fedUp') { buzz([70, 50, 70]); note('booped you until you got fed up'); if (S.day) S.day.rough++; heat(0.25, 'you poked me until I snapped'); opinion(-1.5, 'too much poking'); setTimeout(function () { touchSay(TOUCH.fedUp[tm] || TOUCH.fedUp.any, 'annoyed'); }, 300); }
-      if (type === 'refused') { if (chance(0.5)) touchSay(TOUCH.refuse, 'annoyed'); }
+      if (type === 'fedUp') { if (S.day && S.day.rough >= 3 && chance(0.35)) shockFace('fury');
+        buzz([70, 50, 70]); note('booped you until you got fed up'); if (S.day) S.day.rough++; heat(0.25, 'you poked me until I snapped'); opinion(-1.5, 'too much poking'); setTimeout(function () { touchSay(TOUCH.fedUp[tm] || TOUCH.fedUp.any, 'annoyed'); }, 300); }
+      if (type === 'refused' && (!d.why || d.why === 'fedUp')) { if (chance(0.5)) touchSay(TOUCH.refuse, 'annoyed'); }
       if (type === 'calmed') { feel('tired', 15); if (S.day && S.day.reason && !S.day.revealed && S.day.rough >= 2 && chance(0.5)) setTimeout(function () { explainMood(true); }, 900); }
       if (type === 'grab' && d.type === 'arm') {
         note('held your hand');
@@ -1255,8 +1859,10 @@
         else if (WEATHER.temp >= 28) addP([fill(T("It's {t}° where you are. ‖ Drink water."), { t: WEATHER.temp })], 2);
         else if (WEATHER.temp <= 3) addP([fill(T("It's {t}° where you are. ‖ Wear something warm."), { t: WEATHER.temp })], 2);
       }
-      var om = open(); if (om.length) cand.push(fill(T('Have you done the {m} thing yet? ‖ Just asking.'), { m: JA ? om[0].text : om[0].text.toLowerCase() }));
+      var om = open(); if (om.length && Date.now() - (S.lastNag || 0) > 2.5 * 3600e3 && chance(0.4)) { S.lastNag = Date.now(); } else om = [];
+      if (om.length) cand.push(fill(T('Have you done the {m} thing yet? ‖ Just asking.'), { m: JA ? om[0].text : om[0].text.toLowerCase() }));
       if (S.name && chance(0.2)) cand.push(fill(T('{name}. ‖ …Just checking you\'re still there.'), { name: S.name }));
+      EXT.idle.forEach(function (fn) { try { var x = fn(); if (x && x[0] && x[0].length) addP(x[0], x[1] || 1); } catch (e) { console.error(e); } });
       if (S.study && S.study.week === weekKey() && chance(0.5)) { var stp = studyTopic(S.study); addP(LINES.studyIdle.map(function (x) { return fill(x, { topic: JA ? stp.ja : stp.en }); }), 1); }
       cand = cand.filter(function (c) { return usedIdle.indexOf(c) < 0; });
       if (!cand.length) { usedIdle = []; return null; }
@@ -1265,9 +1871,10 @@
     }
     function idleTick() {
       var now = Date.now();
-      if (document.hidden || BODY.state !== 'awake' || busy || UIBUSY_B() || now < nextIdle || !greeted) return;
+      if (document.hidden || BODY.state !== 'awake' || busy || UIBUSY_B() || now < nextIdle || !greeted || extMuted()) return;
       if (now - lastPlayerAt < 45000 || now - lastSpoke < 25000) { nextIdle = now + 15000; return; }
       nextIdle = now + idleGap();
+      if (maybeOffer()) return;
       // with your own key, she sometimes thinks up something herself (only while you're actually around)
       var kind = brainKind();
       if ((kind === 'openrouter' || kind === 'anthropic') && now - lastMuse > 4 * 60000 && now - Math.max(lastPlayerAt, lastTouch) < 10 * 60000 && chance(0.4)) {
@@ -1275,6 +1882,52 @@
         return;
       }
       var l = idleLine(); if (l) say(l, chance(0.3) ? 'down' : null, null, { quiet: true });
+    }
+
+    // ---------- games you play against her ----------
+    function lineAt(key) { var o = LINES; key.split('.').forEach(function (k) { o = o && o[k]; }); return o; }
+    function duoLine(key, v) {
+      var o = lineAt(key); if (!o) return null;
+      if (!Array.isArray(o)) o = o[temper()] || o.calm || o[Object.keys(o)[0]];
+      return Array.isArray(o) ? fill(pickL(o), vars(v)) : null;
+    }
+    function duoCan(id) {
+      var tm = temper(), li = levelIdx(S.op);
+      if (BODY.state === 'fedUp') return { ok: false, line: duoLine('duo.refuse.fedUp') };
+      if (isLate() && chance(0.5)) return { ok: false, line: duoLine('duo.refuse.tired') };
+      if (tm === 'grumpy' && li < 8 && chance(0.5)) return { ok: false, line: duoLine('duo.refuse.grumpy') };
+      if (tm === 'dismissive' && chance(0.3)) return { ok: false, line: duoLine('duo.refuse.dismissive') };
+      return { ok: true };
+    }
+    function duoReward(id, result) {
+      var d = herDay(); if (!S.games || S.games.day !== d) S.games = { day: d, pts: 0, n: 0 };
+      S.games.n++; S.lastDuoAt = Date.now();
+      var pts = Math.max(0, Math.min({ win: 6, draw: 4, lose: 3 }[result] || 0, GAME_CAP - S.games.pts));
+      if (pts) { S.games.pts += pts; S.points += pts; emit('points'); }
+      S.duo = S.duo || {}; var rec = S.duo[id] = S.duo[id] || { w: 0, l: 0, d: 0 }; rec[{ win: 'w', lose: 'l', draw: 'd' }[result]]++;
+      save(); return pts;
+    }
+    function duoDone(id, result, pts, again) {
+      lastPlayerAt = Date.now(); greeted = true; nextIdle = Date.now() + idleGap() + 20000; BODY.wake();
+      note('played ' + id + ' with you (' + ({ win: 'you lost', lose: 'you won', draw: 'draw', quit: 'they quit' })[result] + ')');
+      if (result === 'quit') { opinion(-0.3, 'they quit our game'); feel('sulky', 30); }
+      else { opinion(0.8, 'we played together'); warm(0.1, 'we played a game together'); feel(result === 'lose' ? 'smug' : result === 'win' ? (temper() === 'grumpy' ? 'annoyed' : 'impressed') : 'amused', 40); }
+      var rec = S.duo && S.duo[id];
+      if (rec && rec.w + rec.l + rec.d === 1) remember('First time we played ' + id + ' together. ' + (result === 'lose' ? 'I won.' : result === 'win' ? 'They won.' : 'Nobody won.'), 1);
+      if (!again) setTimeout(function () { var l = duoLine('duo.after.' + result); if (l) say(l, result === 'lose' ? 'happy' : result === 'win' ? 'away' : 'content'); }, 900);
+    }
+    function duoChain(words, w) {
+      var prompt = [
+        'You are Pusheen (dry, calm, smart) playing ' + (JA ? 'しりとり (shiritori)' : 'a word-chain game') + ' with the player. Your mood: ' + temper() + '.',
+        JA ? 'Rules: nouns only, in Japanese. The next word starts with the last kana of the previous word (small kana count as their big form; for a final ー use the kana before it). A word ending in ん loses. No repeats.'
+           : 'Rules (in ' + (navigator.language || 'en').slice(0, 2) + ' or English, whatever the player uses): common nouns only, no names. The next word starts with the last letter of the previous word. No repeats.',
+        'Words so far: ' + (words.length ? words.join(' → ') : '(none)') + '.',
+        w ? 'The player just played: "' + w + '". Check it: real noun, follows the rule from the previous word, not used before. If it breaks a rule, set valid false and say why in one short sentence (in character).'
+          : 'You start: pick an easy, common word.',
+        'Then play your own word that follows the rules from ' + (w ? 'their word' : 'nothing') + '. Use common words. After a long chain (15+) you may honestly run out and give up. Never play a word ending in ん' + (JA ? '' : ' (n/a in English)') + '.',
+        'Reply with JSON only: {"valid": true or false (the player\'s word; true if there is none), "why": "short reason if invalid", "word": "your word", "reading": "' + (JA ? 'hiragana reading of your word' : 'same as word') + '", "say": "optional very short comment in your voice", "give_up": false}'
+      ].join('\n');
+      return Promise.resolve().then(function () { return callAI(prompt, true, null, 300); });
     }
 
     // ---------- little games: points for playing (capped per day) ----------
@@ -1430,7 +2083,18 @@
       else { if (hiddenAt && Date.now() - hiddenAt > 5 * 60000) openedAt = Date.now(); if (Date.now() - S.lastSeen > 30 * 60000) arrive(); }
     });
 
+    var KIT = {
+      get S() { return S; }, EXT: EXT, LINES: LINES, TOUCH: TOUCH, SHOP: SHOP, get WEATHER() { return WEATHER; }, get JA() { return JA; }, T: T,
+      say: say, sayL: sayL, fill: fill, vars: vars, pickL: pickL, chance: chance, clampN: clampN, pad: pad, ymd: ymd, herDay: herDay, hhmm: hhmm, hourOf: hourOf, weekKey: weekKey, newId: newId, ago: ago,
+      heat: heat, warm: warm, opinion: opinion, remember: remember, feel: feel, note: note, emit: emit, save: save, addLog: addLog, logNote: logNote,
+      callAI: callAI, brainKind: brainKind, respond: respond, temper: temper, levelIdx: levelIdx, levelName: levelName, android: android, isLate: isLate,
+      studyTopic: studyTopic, studyWeek: studyWeek, studyAnswer: studyAnswer, open: open, complete: complete, placeName: placeName, dayEvents: dayEvents,
+      shockFace: shockFace, buzz: buzz, addTimer: addTimer, feed: feed, eventsToday: eventsToday, applyWorld: applyWorld, routineNow: routineNow, offer: offer,
+      get lastPlayerAt() { return lastPlayerAt; }, get busy() { return busy; }, uiBusy: function () { return UIBUSY_B(); }, get greeted() { return greeted; },
+      quietIdle: function (ms) { nextIdle = Date.now() + ms; }, goPlace: goPlace, wakeTime: function () { return S.wake; }, buy: buy, shopState: shopState
+    };
     return {
+      _k: KIT,
       on: function (fn) { listeners.push(fn); },
       start: function () {
         SCENE.setOwned(S.owned);
@@ -1439,7 +2103,7 @@
         BODY.earmuffs(!!S.muted);
         if (window.claude && claude.use) claude.use('sample').then(function (sm) { if (sm && sm.limits) return sm.limits().then(function (l) { photoOk = !!(l && l.images); emit('ai'); }); }).catch(function () {});
         setTimeout(function () { refreshLocation(false); syncAlarm(); }, 4000);
-        setInterval(function () { if (!document.hidden) refreshLocation(false); }, 30 * 60000);
+        lifeStart();
         return connect().then(function () {
           SCENE.setOwned(S.owned); if (S.owned.house && S.place === 'house' && BODY.place !== 'house') BODY.setPlaceNow('house'); arrive();
           var an = android(); if (an) setTimeout(function () { try { onMusic(JSON.parse(an.nowPlaying())); } catch (e) {} }, 5000);
@@ -1450,8 +2114,14 @@
       setMuted: setMuted, get muted() { return !!S.muted; },
       games: { reward: gameReward, done: gameDone, today: function () { return S.games && S.games.day === herDay() ? S.games : { pts: 0, n: 0 }; }, cap: GAME_CAP },
       study: { next: studyNext, review: studyReview, answer: studyAnswer, info: studyInfo, setTopic: studySetTopic, topicName: function () { return studyInfo().name; } },
+      duo: { line: duoLine, has: function (k) { return !!lineAt(k); }, can: duoCan, reward: duoReward, done: duoDone, chain: duoChain, mood: function () { return temper(); }, level: function () { return levelIdx(S.op); }, stats: function () { return S.duo || {}; } },
+      sayNow: function (t, f) { say(t, f, null, { cut: true }); },
+      offer: offer, answerOffer: answerOffer, shock: function (k) { return shockFace(k || 'shock', true); }, touchy: touchy,
       interact: interact, screen: function () { return S.screen && S.screen.day === herDay() ? S.screen : null; }, refreshScreen: refreshScreen, fmtMin: fmtMin,
       exportCode: exportCode, importCode: importCode,
+      addPlace: addPlace, removePlace: removePlace, places: function () { return S.places || []; }, placeNow: function () { return S.placeNow && placeName(S.placeNow); }, where: whereText,
+      diary: function () { return (S.diary || []).slice().reverse(); }, diaryOpen: diaryOpen, writeDiary: writeDiary, senses: function () { return { bat: BAT, phones: PHONES, call: CALL, unread: UNREAD, steps: S.steps, sleep: lastSleep(), cal: S.cal || [], routine: routineNow().id }; },
+      events: eventsToday, routine: routineNow, applyWorld: applyWorld, planTexts: planTexts, refreshSenses: function () { syncPlaces(); senseTick(false); },
       setLocation: setLocation, setCity: setCity, locOn: function () { return !!locCfg().on; }, place: function () { return S.loc; }, weather: function () { return WEATHER; },
       canSeePhotos: function () { var k = brainKind(); return k === 'openrouter' || k === 'anthropic' || (k === 'claude' && photoOk); },
       hunger: hunger,

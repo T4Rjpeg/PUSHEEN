@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mali:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&text=%20%21%22%27%28%29%2C-.0123456789%3A%3B%3F%40ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz~%C2%B0%E2%80%A6%E2%99%AA%E2%99%AB%E2%9C%A6%E3%80%9C%E3%81%85%E3%81%86%E3%81%88%E3%81%8F%E3%81%90%E3%81%99%E3%81%9A%E3%81%A0%E3%81%A3%E3%81%A4%E3%81%AB%E3%81%AF%E3%81%B2%E3%81%B4%E3%81%B5%E3%81%B7%E3%81%B8%E3%81%BD%E3%82%80%E3%82%82%E3%82%83%E3%82%84%E3%82%88%E3%82%8B%E3%82%93%E3%83%81%E3%83%83%E3%83%89%E3%83%91%E3%83%A0%E3%83%B3%E3%83%BC&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&text=%20%21%22%27%28%29%2C-.0123456789%3A%3B%3F%40ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz~%C2%B0%E2%80%A6%E2%99%AA%E2%99%AB%E2%9C%A6%E3%80%9C%E3%81%85%E3%81%86%E3%81%88%E3%81%8F%E3%81%90%E3%81%97%E3%81%99%E3%81%9A%E3%81%A0%E3%81%A3%E3%81%A4%E3%81%AB%E3%81%AF%E3%81%B2%E3%81%B4%E3%81%B5%E3%81%B7%E3%81%B8%E3%81%BD%E3%82%80%E3%82%82%E3%82%83%E3%82%84%E3%82%85%E3%82%88%E3%82%8B%E3%82%93%E3%82%A1%E3%82%AB%E3%82%AF%E3%82%B7%E3%83%81%E3%83%83%E3%83%89%E3%83%8F%E3%83%91%E3%83%A0%E3%83%A7%E3%83%B3%E3%83%BC&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap">
 <style>
   /* Pusheen's doodled garden. Canvas fills the screen (sky follows the real clock and season).
@@ -130,6 +130,18 @@
   .say .sq { width: 42px; height: 42px; border-radius: 13px 15px 12px 14px; display: grid; place-items: center; padding: 0; flex: none; }
   .say .sq svg { width: 20px; height: 20px; }
   .say .send { background: var(--pink); }
+  .mic.listening { background: var(--pink); animation: micp 1s ease-in-out infinite; }
+  @keyframes micp { 50% { transform: scale(1.08); } }
+  .mic { touch-action: none; -webkit-user-select: none; user-select: none; }
+  .sense { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; }
+  .sense .status { flex: 1; margin: 0; }
+  .mem.diary li { grid-template-columns: 1fr; gap: 2px; background: #fff; }
+  .plist { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+  .plist li { display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 12px; border-radius: 12px; background: var(--paper-2); border: 1.5px solid rgba(91,73,68,.25); font-weight: 700; }
+  .plist .nm { flex: 1; }
+  .offer { position: absolute; left: 0; right: 0; bottom: 58px; margin: 0 auto; width: max-content; max-width: 100%; display: flex; gap: 8px; align-items: center; padding: 7px 8px 7px 12px; border-radius: 18px; z-index: 1; animation: pop .25s ease; }
+  .offer .ot { font-size: 13.5px; font-weight: 700; color: var(--ink-soft); }
+  .offer .btn { height: 38px; }
   .quick { position: absolute; left: 0; bottom: 52px; border-radius: 16px; padding: 6px; display: grid; gap: 2px; min-width: 230px; }
   .quick button { border: 0; background: none; text-align: left; padding: 9px 11px; border-radius: 10px; font-size: 15px; font-weight: 700; display: flex; gap: 10px; align-items: center; }
   .quick button:hover { background: var(--paper-2); }
@@ -280,6 +292,38 @@
   .gend-h { font-size: 26px; font-weight: 700; } .gend-l { color: var(--ink-soft); font-size: 15px; }
   .gend-r { font-size: 30px; font-weight: 700; padding: 6px 20px; border-radius: 999px; border: 2.5px solid var(--ink); background: var(--butter); box-shadow: var(--shadow); }
   .gend-r.none { font-size: 14.5px; background: var(--grey); }
+  /* games against her */
+  .duo .dtitle { font-weight: 700; font-size: 16px; }
+  .dher { display: flex; align-items: center; gap: 10px; min-height: 92px; flex: none; }
+  .dface { width: 88px; height: 90px; object-fit: contain; flex: none; filter: drop-shadow(0 2px 0 rgba(91,73,68,.15)); }
+  .dline { flex: 1; min-height: 48px; padding: 9px 12px; border-radius: 16px 18px 15px 6px; background: #fff; font-weight: 700; font-size: 15px; line-height: 1.35; display: flex; align-items: center; }
+  .jshow { display: flex; align-items: center; justify-content: center; gap: 18px; }
+  .jhand { font-size: 70px; width: 96px; height: 96px; display: grid; place-items: center; border-radius: 26px; background: var(--paper-2); border: 2.5px solid var(--ink); }
+  .jhand.ok { background: var(--mint); }
+  .jvs { font-weight: 700; color: var(--ink-soft); }
+  .jshow.shake .jhand { animation: jshake .3s ease-in-out 3; }
+  @keyframes jshake { 50% { transform: translateY(-14px) rotate(-6deg); } }
+  .jrow { display: flex; gap: 12px; }
+  .jbtn { width: 88px; height: 88px; font-size: 46px; border-radius: 22px 24px 21px 23px; border: 2.5px solid var(--ink); background: #fff; box-shadow: var(--shadow); touch-action: manipulation; }
+  .jbtn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+  .tgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: min(100%, 300px, 44vh); aspect-ratio: 1; }
+  .tcell { border-radius: 16px 18px 15px 17px; border: 2.5px solid var(--ink); background: #fff; font-size: 44px; font-weight: 700; line-height: 1; padding: 0; touch-action: manipulation; }
+  .tcell.you { color: var(--ink); } .tcell.her { color: var(--pink-deep); background: var(--paper-2); }
+  .cgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; width: min(100%, 380px, 50vh); aspect-ratio: 7 / 6; padding: 8px; border-radius: 18px; background: var(--sky); border: 2.5px solid var(--ink); box-shadow: var(--shadow); }
+  .ccell { border-radius: 50%; border: 2px solid var(--ink); background: var(--paper); padding: 0; touch-action: manipulation; }
+  .ccell.you { background: var(--butter); } .ccell.her { background: var(--pink); }
+  .ccell.fall { animation: cdrop .3s ease-in; }
+  @keyframes cdrop { from { transform: translateY(-120%); } }
+  .mgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: min(100%, 340px, 50vh); aspect-ratio: 1; }
+  .mcard { border-radius: 12px 14px 11px 13px; border: 2.5px solid var(--ink); background: repeating-linear-gradient(45deg, var(--pink) 0 8px, #fbd3dc 8px 16px); font-size: 30px; padding: 0; touch-action: manipulation; }
+  .mcard.up { background: #fff; } .mcard.gone { background: var(--mint); opacity: .55; }
+  .wlist { width: 100%; max-width: 420px; flex: 1; min-height: 140px; max-height: 42vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 4px; }
+  .wrow { display: flex; } .wrow span { padding: 7px 12px; border-radius: 14px; border: 2px solid var(--ink); font-weight: 700; background: #fff; }
+  .wrow.her span { background: var(--pink); } .wrow.you { justify-content: flex-end; } .wrow.you span { background: var(--butter); }
+  .wform { display: flex; gap: 8px; width: 100%; max-width: 420px; } .wform input { flex: 1; min-width: 0; height: 42px; border-radius: 13px; border: 2.5px solid var(--ink); padding: 0 12px; font: inherit; font-weight: 700; background: #fff; }
+  .duoend .gdurs { justify-content: center; }
+  .grec { margin-left: auto; font-size: 12px; color: var(--ink-soft); font-weight: 700; }
+  .duolist { display: grid; gap: 10px; }
   /* the games list (a sheet) */
   .gcard { border: 2.5px solid var(--ink); border-radius: var(--wob); background: #fff; padding: 12px 14px 13px; display: grid; gap: 8px; box-shadow: var(--shadow); }
   .gcard.read { background: var(--paper-2); }
@@ -294,6 +338,30 @@
   .gdurs { display: flex; gap: 6px; flex-wrap: wrap; }
   .gdurs .btn { height: 34px; padding: 0 13px; font-size: 13.5px; }
   .gown { display: flex; gap: 6px; } .gown input { flex: 1; min-width: 0; height: 36px; border-radius: 11px; border: 2.5px solid var(--ink); background: #fff; padding: 0 10px; font-weight: 600; font-size: 14px; }
+  /* ---- mail, photos, studying together ---- */
+  .mbadge { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--coral); border: 2px solid var(--ink); font-size: 12px; display: grid; place-items: center; }
+  .letter textarea { width: 100%; min-height: 120px; border-radius: 12px; border: 2.5px solid var(--ink); background: #fffdf7; padding: 10px 12px; font: inherit; font-size: 15px; line-height: 1.5; resize: vertical; }
+  .mailitem { border: 2.5px solid var(--ink); border-radius: var(--wob); background: #fffdf7; padding: 12px 14px; display: grid; gap: 6px; box-shadow: var(--shadow); }
+  .mailitem.unread { background: #fff6dc; }
+  .mailitem .mh { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--ink-soft); font-weight: 700; }
+  .mailitem .mt { white-space: pre-wrap; line-height: 1.6; font-size: 15px; margin: 0; }
+  .mailitem.mine { background: var(--paper-2); }
+  .mailitem canvas { width: 100%; height: auto; border-radius: 8px; display: block; }
+  .mailitem.unread .mh b::after { content: ' ●'; color: #e2564b; }
+  .goalcard { border: 2.5px solid var(--ink); border-radius: var(--wob); background: #fffdf7; padding: 12px 14px; display: grid; gap: 8px; box-shadow: var(--shadow); }
+  .goalcard .gn { font-size: 19px; font-weight: 700; }
+  .goalcard .row2 { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .thumbs button { padding: 0; border: 2.5px solid var(--ink); border-radius: 6px; background: #fff; aspect-ratio: 1; overflow: hidden; box-shadow: var(--shadow); }
+  .thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .loglist img.lp { display: block; width: 160px; max-width: 70%; margin: 6px 0 2px; border: 3px solid #fff; box-shadow: 0 0 0 2px var(--ink); border-radius: 3px; }
+  .habits li { padding: 4px 0; }
+  .focuschip { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 104px); z-index: 7; display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 12px; border-radius: 999px; background: var(--mint); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .focuschip button { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--ink); background: var(--paper); font-weight: 700; line-height: 1; }
+  .polaroid { position: fixed; z-index: 12; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-2deg); width: min(300px, calc(100vw - 48px)); padding: 12px 12px 4px; background: #fffdf7; border-radius: 4px; animation: polin .35s ease; }
+  .polaroid img { width: 100%; display: block; border: 2px solid var(--ink); }
+  .polaroid p { margin: 8px 2px 8px; font-weight: 700; font-size: 14.5px; text-align: center; }
+  @keyframes polin { from { transform: translate(-50%, -40%) rotate(4deg); opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { .card, .sheet, .pill.pop, .speech .dots span, .game, .gscreen .ok, .gscreen .ko { animation: none; } }
 </style>
 
@@ -336,6 +404,7 @@
   </div>
 </header>
 <div class="drop doodle" id="drop" hidden role="menu">
+  <button data-s="mail" role="menuitem"><span>✉</span>Mail<b class="mbadge" id="mailBadge" hidden></b></button>
   <button data-s="games" role="menuitem"><span>✿</span>Games</button>
   <button data-s="notebook" role="menuitem"><span>✎</span>Her notebook</button>
   <button data-s="settings" role="menuitem"><span>⚙</span>Settings</button>
@@ -348,6 +417,7 @@
 
 <section class="chat" id="chat" aria-label="Talk to Pusheen">
   <div class="attach doodle" id="attach" hidden><img id="attachImg" alt="photo to send"><span>photo ready</span><button type="button" class="x press" id="attachX" aria-label="Remove photo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="offer doodle" id="offer" hidden role="group" aria-label="She is offering something"><span class="ot" id="offerTxt"></span><button type="button" class="btn pinky small" id="offerYes"></button><button type="button" class="btn small" id="offerNo">Not now</button></div>
   <input type="file" id="camIn" accept="image/*" capture="environment" hidden>
   <input type="file" id="picIn" accept="image/*" hidden>
   <form class="say" id="sayForm" autocomplete="off">
@@ -355,6 +425,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
     </button>
     <input id="say" class="doodle" maxlength="400" placeholder="Say something…" enterkeyhint="send" aria-label="Message to Pusheen">
+    <button type="button" class="sq doodle press mic" id="micBtn" aria-label="Hold to talk" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+    </button>
     <button type="submit" class="sq doodle press send" aria-label="Send">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
     </button>
@@ -380,17 +453,22 @@
 </div>
 <div class="holdmenu" id="holdMenu" hidden></div>
 <div class="toast doodle" id="toast" hidden role="status"></div>
+<div class="focuschip doodle" id="focusChip" hidden><span class="fi">📖</span><span id="focusTxt">25:00</span><button id="focusStop" aria-label="Stop studying">✕</button></div>
+<div class="polaroid doodle" id="polaroid" hidden role="dialog" aria-label="A photo from her"><img id="polImg" alt=""><p id="polCap"></p></div>
 <div id="loading">Pusheen…</div>
 
 <script src="sprites.js?v=d59ff94c"></script>
-<script src="scene.js?v=523dc38f"></script>
-<script src="core.js?v=6e3c7a66"></script>
-<script src="lang.js?v=06a2f446"></script>
+<script src="extras.js?v=42c218df"></script>
+<script src="scene.js?v=2cffeb3d"></script>
+<script src="core.js?v=6700e91b"></script>
+<script src="lang.js?v=f9ea1e44"></script>
 <script src="study.js?v=e459b3f9"></script>
-<script src="brain.js?v=d80c74c1"></script>
+<script src="brain.js?v=b4ddc614"></script>
+<script src="mind.js?v=180d5252"></script>
 <script src="games.js?v=3cbc64c4"></script>
-<script src="ui.js?v=fe8d99f7"></script>
-<script src="boot.js?v=b967db83"></script>
+<script src="duo.js?v=0e2da070"></script>
+<script src="ui.js?v=981c27fb"></script>
+<script src="boot.js?v=82dcac49"></script>
 <script>
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});
 </script>
