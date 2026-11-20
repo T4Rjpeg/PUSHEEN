@@ -235,6 +235,9 @@
   .switch input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 99px; background: var(--paper); border: 2px solid var(--ink); transition: left .15s ease; }
   .switch input:checked { background: var(--mint); }
   .switch input:checked::after { left: 21px; }
+  .arrbar { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 112px); transform: translateX(-50%); z-index: 8; display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 14px; border-radius: 999px; background: var(--paper); font-size: 13px; font-weight: 700; white-space: nowrap; max-width: calc(100vw - 20px); }
+  .arrbar span { overflow: hidden; text-overflow: ellipsis; }
+  body.arranging .hint, body.arranging .speech, body.arranging #chat { opacity: 0.35; pointer-events: none; }
   .toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 62px); transform: translateX(-50%); z-index: 12; padding: 7px 15px; border-radius: 999px; font-size: 14px; font-weight: 700; }
   #loading { position: fixed; inset: 0; display: grid; place-items: center; font-size: 20px; font-weight: 700; color: var(--ink); background: var(--paper); z-index: 20; }
   /* ---- little games (full-screen paper page) ---- */
@@ -406,10 +409,11 @@
 <div class="drop doodle" id="drop" hidden role="menu">
   <button data-s="mail" role="menuitem"><span>✉</span>Mail<b class="mbadge" id="mailBadge" hidden></b></button>
   <button data-s="games" role="menuitem"><span>✿</span>Games</button>
+  <button data-s="arrange" role="menuitem"><span>✥</span>Arrange the garden</button>
   <button data-s="notebook" role="menuitem"><span>✎</span>Her notebook</button>
   <button data-s="settings" role="menuitem"><span>⚙</span>Settings</button>
 </div>
-<div class="hint doodle" id="hint">tap to boop · drag her arms or legs · swipe to look around</div>
+<div class="hint doodle" id="hint">tap to boop · tap the ground to call her · drag her anywhere</div>
 
 <div class="speech" id="speech" hidden aria-live="polite"><span id="speechText"></span></div>
 <div class="echo doodle" id="echo" hidden></div>
@@ -459,15 +463,15 @@
 
 <script src="sprites.js?v=d59ff94c"></script>
 <script src="extras.js?v=42c218df"></script>
-<script src="scene.js?v=2cffeb3d"></script>
-<script src="core.js?v=6700e91b"></script>
-<script src="lang.js?v=f9ea1e44"></script>
+<script src="scene.js?v=8d778e81"></script>
+<script src="core.js?v=38683e2a"></script>
+<script src="lang.js?v=e92e2464"></script>
 <script src="study.js?v=e459b3f9"></script>
-<script src="brain.js?v=b4ddc614"></script>
-<script src="mind.js?v=180d5252"></script>
+<script src="brain.js?v=c18b428e"></script>
+<script src="mind.js?v=7ba2a416"></script>
 <script src="games.js?v=3cbc64c4"></script>
 <script src="duo.js?v=0e2da070"></script>
-<script src="ui.js?v=981c27fb"></script>
+<script src="ui.js?v=1168e106"></script>
 <script src="boot.js?v=82dcac49"></script>
 <script>
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});

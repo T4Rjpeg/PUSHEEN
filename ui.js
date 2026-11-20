@@ -301,7 +301,27 @@
       drop.style.top = (r.bottom + 8) + 'px'; drop.style.right = Math.max(10, window.innerWidth - r.right) + 'px';
       drop.hidden = !drop.hidden; this.setAttribute('aria-expanded', String(!drop.hidden));
     });
-    drop.addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; drop.hidden = true; $('menuBtn').setAttribute('aria-expanded', 'false'); openSheet(b.dataset.s); });
+    drop.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return; drop.hidden = true; $('menuBtn').setAttribute('aria-expanded', 'false');
+      if (b.dataset.s === 'arrange') return arrange(true);
+      openSheet(b.dataset.s);
+    });
+    // ---------- arranging the garden: drag her things anywhere on the floor ----------
+    var arrBar = null;
+    function arrange(on) {
+      if (on && BODY.place !== 'garden') { toast(JA ? '庭にいるときだけ並べ替えられます。' : 'Only in the garden. Bring her outside first.'); return; }
+      BODY.setArrange(on);
+      if (on && !arrBar) {
+        arrBar = el('div', 'arrbar doodle');
+        arrBar.appendChild(el('span', null, JA ? '物をドラッグして好きな場所へ' : 'Drag her things anywhere on the ground'));
+        var reset = el('button', 'btn small', JA ? '元に戻す' : 'Put back'); reset.type = 'button';
+        reset.onclick = function () { SCENE.resetLayout(); BRAIN.setLayout({}); toast(JA ? '元の場所に戻しました。' : 'Everything is back where it was.'); };
+        var done = el('button', 'btn ok small', JA ? '完了' : 'Done'); done.type = 'button'; done.onclick = function () { arrange(false); };
+        arrBar.appendChild(reset); arrBar.appendChild(done); document.body.appendChild(arrBar);
+      }
+      if (arrBar) arrBar.hidden = !on;
+      document.body.classList.toggle('arranging', !!on);
+    }
     document.addEventListener('pointerdown', function (e) {
       if (!drop.hidden && !e.target.closest('#drop') && !e.target.closest('#menuBtn')) { drop.hidden = true; $('menuBtn').setAttribute('aria-expanded', 'false'); }
       if (!quick.hidden && !e.target.closest('#quick') && !e.target.closest('#plusBtn')) closeQuick();
@@ -672,6 +692,17 @@
       // brain
       sbody.appendChild(el('h3', null, 'Her brain'));
       var s = el('p', 'status ' + (st.kind === 'off' ? 'off' : 'on')); s.appendChild(el('i')); s.appendChild(document.createTextNode(st.text)); sbody.appendChild(s);
+      if (st.kind !== 'off' && BRAIN.bankInfo) {
+        var bi = BRAIN.bankInfo(), bp = el('p', 'foot');
+        bp.textContent = bi.n ? (JA ? '新しいセリフ ' + bi.n + '個（' + hm(bi.at) + 'に作成）。なくなると自分で書き直します。' : bi.n + ' fresh lines ready (written ' + hm(bi.at) + '). She writes new ones as they run out, or when her mood changes.') : (JA ? 'まだ新しいセリフがありません。すぐ書きます。' : 'No fresh lines yet: she\'ll write some in a moment.');
+        sbody.appendChild(bp);
+      }
+      var aerr = BRAIN.aiError && BRAIN.aiError();
+      if (aerr) {
+        var ep = el('p', 'foot'); ep.style.color = 'var(--warn, #b5562b)';
+        ep.textContent = (JA ? '最後の問題 ' : 'Last problem ') + hm(aerr.at) + ': ' + aerr.code + (aerr.msg ? ' — ' + aerr.msg.slice(0, 140) : '');
+        sbody.appendChild(ep);
+      }
       var prov = el('select'); [['auto', 'Automatic'], ['claude', 'Claude (built into this page)'], ['openrouter', 'OpenRouter key'], ['anthropic', 'Anthropic key'], ['off', 'Off (built-in lines only)']]
         .forEach(function (o) { var op = el('option', null, o[1]); op.value = o[0]; prov.appendChild(op); });
       prov.value = cfg.provider; sbody.appendChild(field('Provider', prov));
@@ -786,20 +817,43 @@
         });
         sbody.appendChild(el('p', 'foot', 'Battery, headphones and phone calls need no permission: she gets sleepy on low battery, talks softly with headphones in, and goes quiet during calls. Add the "Pusheen" widget from your home screen to keep her there.'));
       }
-      // save code
-      sbody.appendChild(el('h3', null, 'Save code'));
-      sbody.appendChild(el('p', 'foot', 'A code that holds everything: her memories, opinion of you, missions, points, house and furniture. Keep it somewhere safe, or paste it into the other version of Pusheen (Claude ↔ app) to carry her over. Your API key is not in it.'));
+      // save: everything, as a file (with her photos) or a code to paste
+      sbody.appendChild(el('h3', null, 'Save'));
+      sbody.appendChild(el('p', 'foot', JA ? 'セーブには全部入ります：記憶、あなたへの気持ち、ミッション、ポイント、持ち物と庭の配置、日記、そしてこの端末の設定（頭脳の種類とモデル、声、言語、位置情報、フローティング）。ファイルには写真も入ります。APIキーは絶対に入りません。新しい端末ではもう一度貼ってください。' :
+        'A save holds everything: her memories, what she thinks of you, missions, points, everything she owns and where it stands, her diary, and this device\'s settings (brain and model, voice, language, location, floating head). Files also keep her photos. Your API key is never in it: paste it again on a new device.'));
+      var frow = el('div', 'mrow');
+      var sf = el('button', 'btn ok', JA ? 'ファイルに保存' : 'Save to a file'); sf.type = 'button';
+      sf.onclick = function () {
+        sf.disabled = true;
+        BRAIN.exportCode(true).then(function (c) { return saveText('pusheen-save-' + new Date().toISOString().slice(0, 10) + '.txt', c); })
+          .then(function (where) { toast(where ? (JA ? '保存しました：' : 'Saved: ') + where : (JA ? '保存しました。' : 'Saved.')); })
+          .catch(function (e) { toast((JA ? '保存できませんでした：' : 'Couldn\'t save: ') + (e && e.message || tr('unknown problem'))); })
+          .then(function () { sf.disabled = false; });
+      };
+      var lf = el('button', 'btn', JA ? 'ファイルから読み込む' : 'Load a file'); lf.type = 'button';
+      var fin = document.createElement('input'); fin.type = 'file'; fin.accept = '.txt,.pusheen,text/plain'; fin.hidden = true;
+      fin.onchange = function () {
+        var f = fin.files && fin.files[0]; fin.value = ''; if (!f) return;
+        if (f.size > 12e6) { toast(JA ? 'ファイルが大きすぎます。' : 'That file is too big to be a save.'); return; }
+        var rd = new FileReader();
+        rd.onload = function () { loadSave(String(rd.result || '')); };
+        rd.onerror = function () { toast(JA ? '読み込めませんでした。' : 'Couldn\'t read that file.'); };
+        rd.readAsText(f);
+      };
+      lf.onclick = function () { fin.click(); };
+      frow.appendChild(sf); frow.appendChild(lf); sbody.appendChild(frow); sbody.appendChild(fin);
       var code = el('textarea', 'codebox'); code.rows = 3; code.placeholder = 'Your save code will appear here. To load one, paste it here.'; code.spellcheck = false;
       var srow = el('div', 'mrow');
-      var mk = el('button', 'btn ok', 'Make a save code'); mk.type = 'button';
-      mk.onclick = function () { BRAIN.exportCode().then(function (c) { code.value = c; code.focus(); code.select(); try { navigator.clipboard.writeText(c).then(function () { toast('Copied. Keep it somewhere safe.'); }, function () { toast('Select it all and copy it.'); }); } catch (e) { toast('Select it all and copy it.'); } }); };
+      var mk = el('button', 'btn', 'Make a save code'); mk.type = 'button';
+      mk.onclick = function () { BRAIN.exportCode(false).then(function (c) { code.value = c; code.focus(); code.select(); try { navigator.clipboard.writeText(c).then(function () { toast('Copied. Keep it somewhere safe.'); }, function () { toast('Select it all and copy it.'); }); } catch (e) { toast('Select it all and copy it.'); } }); };
       var ld = el('button', 'btn', 'Load this code'), armedL = false; ld.type = 'button';
       ld.onclick = function () {
         if (!code.value.trim()) { toast('Paste a save code first.'); return; }
         if (!armedL) { armedL = true; ld.textContent = tr('Tap again: replace her with this save'); setTimeout(function () { armedL = false; ld.textContent = tr('Load this code'); }, 4000); return; }
-        BRAIN.importCode(code.value).then(function () { closeSheet(); toast('Loaded.'); }).catch(function (e) { toast((JA ? 'コードが使えませんでした：' : 'That code didn\'t work: ') + (e && e.message || tr('unknown problem'))); });
+        loadSave(code.value, true);
       };
       srow.appendChild(mk); srow.appendChild(ld); sbody.appendChild(code); sbody.appendChild(srow);
+      sbody.appendChild(el('p', 'foot', JA ? 'コードは写真なしの短い版です。長すぎてコピーできない時はファイルを使ってください。' : 'The code is the short version, without photos. If it\'s too long to copy on your phone, use the file instead.'));
       // memory
       sbody.appendChild(el('h3', null, 'Memory'));
       var forget = el('button', 'btn danger', 'Forget everything'), armed = false;
@@ -808,6 +862,35 @@
         BRAIN.reset(); closeSheet();
       };
       sbody.appendChild(forget);
+    }
+    function saveText(name, text) {
+      var an = BRAIN.android();
+      if (an) {
+        if (!an.saveFile) return Promise.reject(new Error(JA ? 'アプリを更新するとファイル保存が使えます。今はコードを使ってください。' : 'update the app to save files. Use the code for now.'));
+        var where = ''; try { where = an.saveFile(name, text); } catch (e) {}
+        return where ? Promise.resolve(where) : Promise.reject(new Error(JA ? '書き込めませんでした' : 'the phone refused to write it'));
+      }
+      function web() {
+        try {
+          var url = URL.createObjectURL(new Blob([text], { type: 'text/plain' })), a = document.createElement('a');
+          a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+          return Promise.resolve(name);
+        } catch (e) { return Promise.reject(e); }
+      }
+      if (window.claude && claude.use) return claude.use('downloads').then(function (d) {
+        if (!d) return web();
+        return d.save({ filename: name, data: text }).then(function () { return name; }, function (e) {
+          if (e && (e.code === 'declined' || e.code === 'dismissed' || e.code === 'cancelled')) throw new Error(JA ? 'キャンセルしました' : 'cancelled');
+          return d.save({ filename: name, data: new Blob([text], { type: 'text/plain' }) }).then(function () { return name; });
+        });
+      }, web);
+      return web();
+    }
+    function loadSave(text, fromCode) {
+      var m = /PSH[0-3]:[A-Za-z0-9+\/=_-]+/.exec(String(text).replace(/\s+/g, ''));
+      if (!m) { toast(JA ? 'セーブが見つかりませんでした。' : 'There\'s no Pusheen save in that.'); return; }
+      BRAIN.importCode(m[0]).then(function (r) { closeSheet(); toast(r === 'reload' ? (JA ? '読み込みました。言語を切り替えます…' : 'Loaded. Switching language…') : 'Loaded.'); })
+        .catch(function (e) { toast((JA ? 'コードが使えませんでした：' : 'That code didn\'t work: ') + (e && e.message || tr('unknown problem'))); });
     }
     function liveSeason() { var m = new Date().getMonth(); return m >= 2 && m <= 4 ? 'spring' : m >= 5 && m <= 7 ? 'summer' : m >= 8 && m <= 10 ? 'autumn' : 'winter'; }
     var toastT = 0;
@@ -835,6 +918,7 @@
       else if ((type === 'study' || type === 'ai' || type === 'points') && sheetKind === 'games') render();
       else if ((type === 'mem' || type === 'opinion') && sheetKind === 'notebook') render();
       else if (type === 'state') { updatePoints(); updateBadge(); updateHouse(); updateFeel(); updateMute(); }
+      else if (type === 'imported') { if (d && d.voice) VOICE.set(d.voice); if (d && typeof d.sound === 'string') VOICE.setSound(d.sound); }
     });
     if (typeof MIND !== 'undefined') MIND.on(function (type, d) {
       if (type === 'openMail') openSheet('mail');

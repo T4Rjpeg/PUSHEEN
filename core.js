@@ -40,14 +40,24 @@
     R: { e: 14 * D2R, ev: 0, f: 11 * D2R, fv: 0, z: 'back', pose: 'down' }
   };
   var lean = 0, t = 0, grab = null;
-  var cam = { s: 1, x: 0, y: 0, shake: 0, free: 0 }, view = { w: 0, h: 0, k: 1, dpr: 1 };
+  var cam = { s: 1, x: 0, y: 0, yd: 0, shake: 0, free: 0 }, view = { w: 0, h: 0, k: 1, dpr: 1 };
   var PLACE = { name: 'garden', fade: 0, busy: false };
   var prevShoulder = { L: null, R: null }, shoulderAcc = { L: V(0, 0), R: V(0, 0) }, prevShoulderV = { L: V(0, 0), R: V(0, 0) };
   var prevWaistV = V(0, 0), waistAcc = V(0, 0), prevWaist = null;
   var finger = { v: V(0, 0), a: V(0, 0), last: null };
   var react = null, fx = [];
-  var wander = { x: 0, target: 0, next: 8, dir: 0, goal: null };
+  var wander = { x: 0, target: 0, z: 0, tz: 0, next: 8, dir: 0, goal: null };
   function wanderRange() { var b = SCENE.bounds(PLACE.name); return [b[0] - 660 + 260, b[1] - 660 - 260]; }
+  // ---------- the garden is a floor, not a line: z is how far in front of (+) or behind (−) her usual spot her feet stand ----------
+  function zRange() { return SCENE.depth ? SCENE.depth(PLACE.name) : [0, 0]; }
+  function dScale(z) { return 1 + z / 1500; }
+  function herOX() { return 660 + body.x; }
+  // her own drawing space (rig, props, marks) ↔ the garden's world space
+  function herToWorld(p) { var s = dScale(wander.z), ox = herOX(); return V(ox + (p.x - ox) * s, GROUND + wander.z + (p.y - GROUND) * s); }
+  function worldToHer(p) { var s = dScale(wander.z), ox = herOX(); return V(ox + (p.x - ox) / s, GROUND + (p.y - GROUND - wander.z) / s); }
+  function herXf() { var s = dScale(wander.z), ox = herOX(); ctx.translate(ox, GROUND + wander.z); ctx.scale(s, s); ctx.translate(-ox, -GROUND); }
+  function toHer(sx, sy) { return worldToHer(toWorld(sx, sy)); }
+  function freeSpot(x, z) { return !SCENE.blocked || !SCENE.blocked(PLACE.name, 660 + x, GROUND + z); }
   var vibe = { until: 0, likes: true, nextNote: 0 };
   // body-level mood: awake / asleep / fedUp. Temper (calm, grumpy, sad...) comes from her brain.
   var mood = { state: Math.random() < 0.5 ? 'asleep' : 'awake', until: 0, boops: [], upset: 0, reliefAt: 0, lastTouch: 0, nextZ: 1, sleepSide: Math.random() < 0.5 ? -1 : 1, flail: 0 };
@@ -158,10 +168,14 @@
   function planWander() {
     // she drifts slowly around the garden now and then, leaning and looking where she goes
     if (wander.goal) return;
-    if (mood.state !== 'awake' || grab || t < vibe.until || PLACE.busy) { wander.target = wander.x; return; }
+    if (mood.state !== 'awake' || grab || t < vibe.until || PLACE.busy) { wander.target = wander.x; wander.tz = wander.z; return; }
     if (t < wander.next) return;
-    var r = wanderRange(), far = TEMPER.name === 'sad' ? 250 : TEMPER.name === 'kind' || TEMPER.name === 'delighted' ? 900 : 650;
-    wander.target = Math.random() < 0.25 ? wander.x : clamp(wander.x + rnd(-far, far), r[0], r[1]);
+    var r = wanderRange(), zr = zRange(), far = TEMPER.name === 'sad' ? 250 : TEMPER.name === 'kind' || TEMPER.name === 'delighted' ? 900 : 650;
+    for (var tries = 0; tries < 6; tries++) {
+      var nx = Math.random() < 0.2 ? wander.x : clamp(wander.x + rnd(-far, far), r[0], r[1]);
+      var nz = Math.random() < 0.35 ? wander.z : clamp(wander.z + rnd(-far, far) * 0.45, zr[0], zr[1]);
+      if (freeSpot(nx, nz) && freeSpot((nx + wander.x) / 2, (nz + wander.z) / 2)) { wander.target = nx; wander.tz = nz; break; }
+    }
     wander.next = t + rnd(9, 20);
   }
 
@@ -207,7 +221,9 @@
     blush: [2, function () { showFace('content', 2); mark('hearts', 2); }],
     walk_left: [0.5, function () { var r = wanderRange(); wander.target = clamp(wander.x - 520, r[0], r[1]); wander.next = t + 12; }],
     walk_right: [0.5, function () { var r = wanderRange(); wander.target = clamp(wander.x + 520, r[0], r[1]); wander.next = t + 12; }],
-    come_here: [0.5, function () { var r = wanderRange(), cs = view.k * cam.s; wander.target = clamp(-cam.x / cs, r[0], r[1]); wander.next = t + 12; }],
+    walk_closer: [0.5, function () { var zr = zRange(); wander.tz = clamp(wander.z + 260, zr[0], zr[1]); wander.next = t + 12; }],
+    walk_away: [0.5, function () { var zr = zRange(); wander.tz = clamp(wander.z - 260, zr[0], zr[1]); wander.next = t + 12; }],
+    come_here: [0.5, function () { var r = wanderRange(), zr = zRange(), cs = view.k * cam.s; wander.target = clamp(-cam.x / cs, r[0], r[1]); wander.tz = clamp(Math.max(wander.z, zr[1] * 0.45), zr[0], zr[1]); wander.next = t + 12; }],
     nap: [0.5, function () { setMood('asleep'); }],
     sneeze: [1.4, function () { anim.nod = { t0: t + 0.35, dur: 0.5 }; showFace('sleep', 0.5); later(0.35, function () { body.vy -= 260; body.sqv += 1.2; var p = headPt(V(800, 300)); word(['ハクション', 'くしゅん', 'Achoo!'], V(p.x + 70, p.y), { size: 50, dur: 1.2 }); emit('sneeze'); }); }]
   };
@@ -375,15 +391,30 @@
     var sway = reduceMotion ? 0 : Math.sin(t * 0.8) * (asleep ? 0.02 : 0.012);
 
     // wandering: a slow walk-like drift
-    if (wander.goal) wander.target = wander.goal.x;
-    var wdx = wander.target - wander.x, wsp = (wander.goal ? 280 : 40) * dt;
-    wander.x += clamp(wdx, -wsp, wsp);
-    wander.dir = Math.abs(wdx) > 6 && !grab ? Math.sign(wdx) : 0;
-    if (wander.goal && Math.abs(wander.goal.x - wander.x) < 4 && Math.abs(body.x - wander.x) < 30) { var gcb = wander.goal.cb; wander.goal = null; if (gcb) gcb(); }
+    if (wander.goal) { wander.target = wander.goal.x; if (wander.goal.z != null) wander.tz = wander.goal.z; }
+    var wdx = wander.target - wander.x, wdz = wander.tz - wander.z, wl = Math.hypot(wdx, wdz), wsp = (wander.goal ? 280 : 40) * dt;
+    if (wl > 0.01 && !grab) { var wf = Math.min(1, wsp / wl); wander.x += wdx * wf; wander.z += wdz * wf; }
+    wander.dir = Math.abs(wdx) > 6 && Math.abs(wdx) > Math.abs(wdz) * 0.5 && !grab ? Math.sign(wdx) : 0;
+    if (wander.goal && Math.abs(wander.goal.x - wander.x) < 4 && Math.abs(wander.tz - wander.z) < 4 && Math.abs(body.x - wander.x) < 30) { var gcb = wander.goal.cb; wander.goal = null; if (gcb) gcb(); }
     if (grab) wander.goal = null;
-    // the camera follows her along the garden unless you're looking around
     var cs = view.k * cam.s, bnd = SCENE.bounds(PLACE.name);
-    if (!pan && !pinch && !grab && t > cam.free) cam.x += (-body.x * cs - cam.x) * Math.min(1, dt * 1.6);
+    if (ARR.drag) {
+      var azx = view.w * 0.14, azy = view.h * 0.12, aex = ARR.drag.sx < azx ? -(1 - ARR.drag.sx / azx) : ARR.drag.sx > view.w - azx ? (ARR.drag.sx - view.w + azx) / azx : 0;
+      var aey = ARR.drag.sy < azy ? -(1 - ARR.drag.sy / azy) : ARR.drag.sy > view.h - azy ? (ARR.drag.sy - view.h + azy) / azy : 0;
+      if (aex || aey) { cam.x -= aex * 700 * dt; cam.y = clamp(cam.y - aey * 520 * dt, -view.h * 1.4, view.h * 1.4); var aw2 = toWorld(ARR.drag.sx, ARR.drag.sy); SCENE.moveProp(ARR.drag.id, aw2.x + ARR.drag.dx, aw2.y + ARR.drag.dy); }
+    }
+    // dragging her towards an edge of the screen: the view follows
+    if (grab && grab.sx != null) {
+      var ezx = view.w * 0.16, ezy = view.h * 0.12;
+      var ex = grab.sx < ezx ? -(1 - grab.sx / ezx) : grab.sx > view.w - ezx ? (grab.sx - view.w + ezx) / ezx : 0;
+      var ey = grab.sy < ezy ? -(1 - grab.sy / ezy) : grab.sy > view.h - ezy ? (grab.sy - view.h + ezy) / ezy : 0;
+      if (ex) { cam.x -= ex * 700 * dt; cam.free = t + 1.5; }
+      if (ey) { cam.y = clamp(cam.y - ey * 520 * dt, -view.h * 1.4, view.h * 1.4); cam.free = t + 1.5; }
+      var gw = toHer(grab.sx, grab.sy); grab.tx = gw.x; grab.ty = gw.y;
+    }
+    // the camera follows her along the garden (and up and down it) unless you're looking around
+    if (!pan && !pinch && !grab && !ARR.on && t > cam.free) cam.x += (-body.x * cs - cam.x) * Math.min(1, dt * 1.6);
+    if (!pan && !pinch && !ARR.on) { var wantYd = -wander.z * 0.57 * cs, nyd = cam.yd + (wantYd - cam.yd) * Math.min(1, dt * 1.6); cam.y += nyd - cam.yd; cam.yd = nyd; }
     var half = view.w / 2 / cs, fx = 660 - cam.x / cs, fxc = bnd[1] - bnd[0] < half * 2 ? (bnd[0] + bnd[1]) / 2 : clamp(fx, bnd[0] + half, bnd[1] - half);
     cam.x = -(fxc - 660) * cs;
 
@@ -401,6 +432,7 @@
       body.x += body.vx * dt; body.y += body.vy * dt;
       spring(body, 'a', 'va', clamp(body.vx * 0.00045 * grab.lever, -0.45, 0.45), 60, 2 * Math.sqrt(60) * 0.6, 0, dt);
       wander.x = wander.target = body.x;
+      if (body.y > 0) { var zr2 = zRange(), s0 = dScale(wander.z), nz2 = clamp(wander.z + body.y * s0, zr2[0], zr2[1]); body.y -= (nz2 - wander.z) / s0; if (body.vy > 0 && nz2 > wander.z) body.vy *= 0.5; wander.z = wander.tz = nz2; }
     } else if (grab && grab.type === 'leg') {
       // she hangs from your finger by the leg and swings with gravity and your movements
       var Pl = grab.local, r = rot(V(COM.x - Pl.x, COM.y - Pl.y), body.a);
@@ -795,7 +827,7 @@
     return { d: Math.hypot(p.x - (a.x + u * vx), p.y - (a.y + u * vy)), u: u };
   }
   function hitArm(sx, sy, front) {
-    var p = toWorld(sx, sy), best = null, slop = 30 / (view.k * cam.s) * 0.6 + 18;
+    var p = toHer(sx, sy), best = null, slop = 30 / (view.k * cam.s * dScale(wander.z)) * 0.6 + 18;
     ['L', 'R'].forEach(function (k) {
       if ((arms[k].z === 'front') !== front) return;
       var S = shoulderW(k), E = elbowW(k), H = handW(k);
@@ -811,6 +843,13 @@
 
   // ---------- touch, mouse, zoom ----------
   var pointers = new Map(), pinch = null, pan = null, lastTap = 0, press = null, pan0 = null, HANDLE = null;
+  // arranging the garden: drag her things around instead of her
+  var ARR = { on: false, drag: null };
+  function setArrange(on) {
+    ARR.on = !!on; ARR.drag = null; SCENE.setArrange(ARR.on, null);
+    cam.free = ARR.on ? t + 1e9 : t + 1;
+    if (ARR.on && PLACE.name !== 'garden') ARR.on = false;
+  }
   function pt(e) { var r = cv.getBoundingClientRect(); return V(e.clientX - r.left, e.clientY - r.top); }
   cv.addEventListener('pointerdown', function (e) {
     cv.setPointerCapture(e.pointerId);
@@ -822,7 +861,13 @@
       return;
     }
     if (pointers.size > 2) return;
-    var w = toWorld(p.x, p.y), face = 'face_' + faceName();
+    if (ARR.on) {
+      var aw = toWorld(p.x, p.y), aid = SCENE.propAt(aw.x, aw.y);
+      if (aid) { var ap = SCENE.posOf(aid); ARR.drag = { id: aid, dx: ap[0] - aw.x, dy: ap[1] - aw.y, sx: p.x, sy: p.y, moved: false }; SCENE.setArrange(true, aid); emit('arrangePick', { id: aid }); }
+      else pan = { x: p.x, y: p.y, cx: cam.x, cy: cam.y, at: Date.now(), moved: false };
+      return;
+    }
+    var w = toHer(p.x, p.y), face = 'face_' + faceName();
     var arm = hitArm(p.x, p.y, true);
     if (!arm && !onSprite([face, 'dress'], p.x, p.y)) arm = hitArm(p.x, p.y, false);
     var onLegs = !arm && !onSprite([face, 'dress', 'skirt'], p.x, p.y) && onSprite(['legs'], p.x, p.y);
@@ -848,11 +893,12 @@
       grab = { type: 'body', tx: w.x, ty: w.y, ox: w.x - body.x, oy: w.y - body.y, lever: w.y < wp.y ? 1 : -1 };
     } else {
       var now = Date.now();
-      if (now - lastTap < 320) { cam.s = 1; cam.y = 0; cam.free = 0; }
+      if (now - lastTap < 320) { cam.s = 1; cam.y = 0; cam.yd = 0; cam.free = 0; }
       lastTap = now;
       pan = { x: p.x, y: p.y, cx: cam.x, cy: cam.y, at: Date.now(), moved: false }; pan0 = { x: p.x, y: p.y };
     }
     if (grab) {
+      grab.sx = p.x; grab.sy = p.y;
       cv.classList.add('grabbing');
       press = { x: p.x, y: p.y, at: Date.now(), world: w, type: grab.type, moved: false };
       var myPress = press;
@@ -875,27 +921,49 @@
       cam.s = clamp(pinch.s0 * d / pinch.d0, 0.5, 4); keepUnder(pinch.world, mid); cam.free = t + 8;
       return;
     }
+    if (ARR.drag) { ARR.drag.sx = p.x; ARR.drag.sy = p.y; ARR.drag.moved = true; var dw = toWorld(p.x, p.y); SCENE.moveProp(ARR.drag.id, dw.x + ARR.drag.dx, dw.y + ARR.drag.dy); return; }
     if (press && Math.hypot(p.x - press.x, p.y - press.y) > 9) press.moved = true;
-    if (grab) { var w = toWorld(p.x, p.y); grab.tx = w.x; grab.ty = w.y; if (grab.type === 'leg' && Math.abs(wrap(body.a)) > 2.4 && !grab.upside) { grab.upside = true; emit('upside'); } }
-    else if (pan) { if (Math.hypot(p.x - pan.x, p.y - pan.y) > 9) pan.moved = true; cam.x = pan.cx + (p.x - pan.x); cam.y = clamp(pan.cy + (p.y - pan.y), -view.h * 0.6, view.h * 0.6); cam.free = t + 8; }
+    if (grab) { grab.sx = p.x; grab.sy = p.y; var w = toHer(p.x, p.y); grab.tx = w.x; grab.ty = w.y; if (grab.type === 'leg' && Math.abs(wrap(body.a)) > 2.4 && !grab.upside) { grab.upside = true; emit('upside'); } }
+    else if (pan) { if (Math.hypot(p.x - pan.x, p.y - pan.y) > 9) pan.moved = true; cam.x = pan.cx + (p.x - pan.x); cam.y = clamp(pan.cy + (p.y - pan.y), -view.h * 1.1, view.h * 1.1); cam.free = t + 8; }
   });
   function endPointer(e) {
     pointers.delete(e.pointerId);
     if (pointers.size < 2) pinch = null;
+    if (pointers.size === 0 && ARR.on) {
+      if (ARR.drag) { emit('arranged', { id: ARR.drag.id, layout: SCENE.layout() }); ARR.drag = null; SCENE.setArrange(true, null); }
+      pan = null; return;
+    }
     if (pointers.size === 0) {
       var wasBoop = press && !press.moved && !press.held && Date.now() - press.at < 280, at = press && press.world;
       if (grab && grab.type === 'leg' && Math.abs(grab.turned) > Math.PI * 2) {
         var turns = Math.abs(grab.turned) / (Math.PI * 2);
         emit('spun', { turns: turns }); var hp = headPt(V(820, 60)); word(WORDS.dizzy, V(hp.x + 30, hp.y)); showFace('boop', 1.6);
       }
-      var wasTap = pan && !pan.moved && Date.now() - pan.at < 350;
+      var wasTap = pan && !pan.moved && Date.now() - pan.at < 350, grab0 = grab;
       grab = null; pan = null; press = null; cv.classList.remove('grabbing');
       if (wasBoop) boop(at);
-      else if (wasTap) { var tw = toWorld(pan0.x, pan0.y); emit('tapWorld', { x: tw.x, y: tw.y, sx: pan0.x, sy: pan0.y }); }
+      else if (wasTap) {
+        var tw = toWorld(pan0.x, pan0.y), thing = SCENE.hit ? SCENE.hit(tw.x, tw.y, PLACE.name) : null;
+        emit('tapWorld', { x: tw.x, y: tw.y, sx: pan0.x, sy: pan0.y, thing: thing });
+        if (!thing) callTo(tw.x, tw.y);
+      }
+      if (grab0 && grab0.type !== 'leg') { var wr0 = wanderRange(); wander.x = wander.target = clamp(wander.x, wr0[0], wr0[1]); }
     }
   }
   cv.addEventListener('pointerup', endPointer);
   cv.addEventListener('pointercancel', endPointer);
+  // you tapped a spot on the floor: she walks over, if she feels like it
+  function callTo(wx, wy) {
+    var zr = zRange(), r = wanderRange();
+    if (wy < GROUND + zr[0] - 40 || wy > GROUND + zr[1] + 160) return;
+    var x = clamp(wx - 660, r[0], r[1]), z = clamp(wy - GROUND, zr[0], zr[1]);
+    if (!freeSpot(x, z)) { emit('called', { ok: false, why: 'blocked' }); return; }
+    var no = mood.state !== 'awake' || PLACE.busy || grab || moves.queue.length || (TEMPER.name === 'dismissive' && Math.random() < 0.5) || (TEMPER.name === 'grumpy' && Math.random() < 0.3);
+    if (no) { if (mood.state === 'awake') { head.face = x < wander.x ? 'lookLeft' : 'lookRight'; headPlan.next = t + 1.5; } emit('called', { ok: false, why: mood.state }); return; }
+    activ.pause = t + 30;
+    wander.goal = null; wander.target = x; wander.tz = z; wander.next = t + rnd(16, 30); mood.lastTouch = t;
+    emit('called', { ok: true });
+  }
   function keepUnder(world, screen) {
     var s = view.k * cam.s;
     cam.x = screen.x - view.w / 2 - (world.x - CENTER.x) * s;
@@ -919,16 +987,16 @@
     if (cam.shake > 0) { shx = rnd(-1, 1) * 7 * cam.shake / 0.4; shy = rnd(-1, 1) * 5 * cam.shake / 0.4; }
     var cs = view.k * cam.s;
     SCENE.draw(ctx, { w: view.w, h: view.h, dpr: dpr, k: view.k, camS: cam.s, camX: cam.x, camY: cam.y, shx: shx, shy: shy, t: t, reduce: reduceMotion,
-                      place: PLACE.name, music: t < vibe.until && vibe.likes, focusX: -cam.x / cs, anchor: ANCHOR },
-      function () { ctx.setTransform(dpr, 0, 0, dpr, shx * dpr, shy * dpr); ctx.save(); worldTransform(); drawHer(); ctx.restore(); });
+                      place: PLACE.name, music: t < vibe.until && vibe.likes, focusX: -cam.x / cs, anchor: ANCHOR, herX: herOX(), herY: GROUND + wander.z },
+      function () { ctx.setTransform(dpr, 0, 0, dpr, shx * dpr, shy * dpr); ctx.save(); worldTransform(); herXf(); drawHer(); ctx.restore(); });
     ctx.setTransform(dpr, 0, 0, dpr, shx * dpr, shy * dpr);
     drawNameTag();
-    ctx.save(); worldTransform(); withHead(drawMarks); drawWords(); ctx.restore();
+    ctx.save(); worldTransform(); herXf(); withHead(drawMarks); drawWords(); ctx.restore();
     if (PLACE.fade > 0.003) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = 'rgba(255,248,236,' + PLACE.fade.toFixed(3) + ')'; ctx.fillRect(0, 0, view.w, view.h); }
   }
   // a small doodled name plate on the ground under her
   function drawNameTag() {
-    var p = worldToScreen(V(662 + body.x * 0.9, GROUND + 30)), s = clamp(0.8 + (cam.s - 1) * 0.25, 0.7, 1.3);
+    var p = worldToScreen(herToWorld(V(662 + body.x * 0.9, GROUND + 30))), s = clamp(0.8 + (cam.s - 1) * 0.25, 0.7, 1.3) * dScale(wander.z);
     ctx.save(); ctx.translate(p.x, p.y + 14 * s); ctx.scale(s, s);
     ctx.font = '700 13px Mali, "M PLUS Rounded 1c", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     var tw = ctx.measureText('Pusheen').width + 22;
@@ -946,14 +1014,14 @@
       (function fadeOut() { PLACE.fade = Math.min(1, (t - t0) / 0.6); if (PLACE.fade < 1) return later(0.016, fadeOut);
         PLACE.name = name;
         var off = name === 'house' ? 0 : doorOff;
-        body.x = wander.x = wander.target = off; body.vx = 0;
+        body.x = wander.x = wander.target = off; body.vx = 0; wander.z = wander.tz = 0;
         cam.x = -off * view.k * cam.s; cam.free = 0;
         emit('place', { place: name });
         var t1 = t;
         (function fadeIn() { PLACE.fade = Math.max(0, 1 - (t - t1) / 0.6); if (PLACE.fade > 0) return later(0.016, fadeIn); PLACE.busy = false; wander.next = t + 6; if (cb) cb(true); })();
       })();
     };
-    if (name === 'house') { wander.goal = { x: doorOff, cb: startFade }; }
+    if (name === 'house') { wander.goal = { x: doorOff, z: 0, cb: startFade }; }
     else startFade();
   }
   // what the rest of the app can ask of her body
@@ -966,7 +1034,12 @@
     setBusy: function (fn) { UIBUSY = fn; },
     get state() { return mood.state; }, get now() { return t; },
     sleep: function () { if (mood.state === 'awake') setMood('asleep'); },
-    headTop: function () { return worldToScreen(headPt(V(655, 40))); },
+    headTop: function () { return worldToScreen(herToWorld(headPt(V(655, 40)))); },
+    // a stroll somewhere else in the garden, now
+    wander: function () { if (mood.state === 'awake' && !grab && !wander.goal && !PLACE.busy) wander.next = 0; },
+    walkTo: function (wx, wy) { callTo(wx, wy); }, get depth() { return wander.z; },
+    setArrange: setArrange, get arranging() { return ARR.on; },
+    feet: function () { return { x: herOX(), y: GROUND + wander.z }; },
     // music playing on the phone: she bobs along for as long as a song she likes plays; a song she hates gets a short fit
     music: function (on, likes) {
       if (!on) { if (vibe.until > t) vibe.until = t; if (arms.L.pose === 'vibe') bothArms('down'); return; }
@@ -992,7 +1065,7 @@
       mood.lastTouch = t; showFace('boop', 1.2);
     },
     dizzy: function () { showFace('boop', 2.4); var hp = headPt(V(820, 60)); word(WORDS.dizzy, V(hp.x + 30, hp.y)); mark('sweat', 1.4); body.va += rnd(-3, 3); },
-    goPlace: goPlace, get place() { return PLACE.name; }, setPlaceNow: function (n) { PLACE.name = n; var off = n === 'house' ? 0 : wander.x; body.x = wander.x = wander.target = off; },
+    goPlace: goPlace, get place() { return PLACE.name; }, setPlaceNow: function (n) { PLACE.name = n; var off = n === 'house' ? 0 : wander.x; body.x = wander.x = wander.target = off; if (n === 'house') wander.z = wander.tz = 0; },
     get temper() { return TEMPER.name; },
     shake: function (s) { cam.shake = s || 0.3; },
     setHandleRule: function (fn) { HANDLE = fn; }, setSick: function (on) { sickOn = !!on; }, setDream: function (list) { dreamSy = (list || []).slice(0, 4); }

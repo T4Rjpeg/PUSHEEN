@@ -210,11 +210,7 @@
         b.line([[s - sw * 0.5, sy - 10], [s - sw * 0.1, sy - 16]], { stroke: '#ffffff', lw: 1.4, g: 'shine', wob: 1 });
       }
       // zen rocks with raked rings
-      [[-300, 1760, 1], [1700, 1820, 0.8], [3000, 1740, 1.1]].forEach(function (r) {
-        for (var ring = 3; ring >= 1; ring--) b.ell(r[0], r[1] + 10, 150 * r[2] + ring * 46, 40 * r[2] + ring * 16, { fill: null, stroke: C.rake, lw: 1.5, g: 'rings', irr: 0.04 });
-        b.add([[r[0] - 120 * r[2], r[1] + 16], [r[0] - 100 * r[2], r[1] - 60 * r[2]], [r[0] - 20 * r[2], r[1] - 110 * r[2]], [r[0] + 70 * r[2], r[1] - 80 * r[2]], [r[0] + 120 * r[2], r[1] + 16]], { fill: C.stone, wob: 5 });
-        b.ell(r[0] - 30 * r[2], r[1] - 88 * r[2], 50 * r[2], 18 * r[2], { fill: C.moss, irr: 0.2 });
-      });
+      // (the zen rocks are drawn as movable things now, see PROPS)
       // bushes against the fence
       [-1500, -1050, -150, 880, 1550, 3300].forEach(function (x) { b.canopy(x, FENCE_BASE + 10, 95 + R() * 30, [F.bush[0], F.bush[1], F.bush[1]], { dots: sea === 'spring' }); });
       // a small koi pond on the left
@@ -231,9 +227,6 @@
       GROUND_TEXT = [{ text: "pusheen's garden", x: sx2, y: FENCE_BASE - 75, size: 32 }];
       // plants and the house, if she has them
       if (owned.house) buildHouse(b, HOUSE.x, HOUSE.base);
-      if (owned.telescope) ITEMS.telescope.draw(b, 2950, FENCE_BASE + 90);
-      if (owned.easel) ITEMS.easel.draw(b, -930, FENCE_BASE + 96);
-      if (owned.goldfish && !owned.house) ITEMS.goldfish.draw(b, -760, 1500);
       return { d: 1, groups: b.groups };
     }
     var GROUND_TEXT = [];
@@ -278,8 +271,6 @@
     var HOUSE_GLOW = [];
 
     // ---------- things she can own ----------
-    var PLANTS = [{ id: 'fern', x: 470, y: FENCE_BASE + 70 }, { id: 'hydrangea', x: 1060, y: FENCE_BASE + 74 }, { id: 'sunflower', x: -80, y: FENCE_BASE + 70 },
-                  { id: 'bonsai', x: 1420, y: FENCE_BASE + 80 }, { id: 'sapling', x: -430, y: FENCE_BASE + 70 }];
     function pot(b, x, y, w, h, col) { b.add([[x - w / 2, y - h], [x + w / 2, y - h], [x + w * 0.38, y], [x - w * 0.38, y]], { fill: col || C.pot, wob: 2 }); b.rect(x - w / 2 - 8, y - h - 16, w + 16, 20, { fill: col || C.pot, wob: 2 }); }
     var ITEMS = {
       house: { draw: function (b, x, y) { buildHouse(b, x, y); } },
@@ -522,31 +513,100 @@
     // ---------- living things drawn every frame: plants that grow and wilt, visitors, the mailbox, photos on her wall ----------
     var lastT = 0, PSTATE = {}, plantB = {}, VIS = null, MAIL = { has: false, flag: false }, WALL = [], FW = false, fw = [], fwNext = 0, waterFx = [];
     var WALL_SPOTS = [[1430, 300], [1610, 330], [1790, 300], [1430, 520], [1610, 540], [1790, 520], [470, 320], [640, 350]];
-    var MAILBOX = { x: 300, y: FENCE_BASE + 86 };
+    // ---------- things standing on the garden floor. Each has a spot (yours to change in "Arrange the garden") and is drawn
+    // in depth order with her and the visitors, so she can walk behind the bonsai and in front of the rocks ----------
+    var HOME = {
+      fern: [470, FENCE_BASE + 70], hydrangea: [1060, FENCE_BASE + 74], sunflower: [-80, FENCE_BASE + 70], bonsai: [1420, FENCE_BASE + 80], sapling: [-430, FENCE_BASE + 70],
+      telescope: [2950, FENCE_BASE + 90], easel: [-930, FENCE_BASE + 96], goldfish: [-760, 1500], mailbox: [300, FENCE_BASE + 86],
+      rock1: [-300, 1760], rock2: [1700, 1820], rock3: [3000, 1740]
+    };
+    var ROCK = { rock1: 1, rock2: 0.8, rock3: 1.1 }, LAYOUT = {}, ARRANGE = { on: false, sel: null }, propB = {};
+    // feet: the patch of floor it stands on (nobody walks through it); pick: how big it is to grab
+    var FOOT = { rock: [150, 46], plant: [78, 28], telescope: [100, 34], easel: [90, 28], goldfish: [72, 24], mailbox: [56, 22] };
+    var PICK = { rock: [140, 130], plant: [110, 380], telescope: [130, 280], easel: [110, 340], goldfish: [80, 150], mailbox: [72, 240] };
+    var PLANT_IDS = ['fern', 'hydrangea', 'sunflower', 'bonsai', 'sapling'];
+    function posOf(id) { var l = LAYOUT[id]; return l && isFinite(l[0]) && isFinite(l[1]) ? l : HOME[id]; }
+    function kindOf(id) { return ROCK[id] ? 'rock' : PLANT_IDS.indexOf(id) >= 0 ? 'plant' : id; }
+    function propsNow() {
+      var L = ['rock1', 'rock2', 'rock3'];
+      PLANT_IDS.forEach(function (id) { if (owned[id]) L.push(id); });
+      if (owned.telescope) L.push('telescope'); if (owned.easel) L.push('easel'); if (owned.goldfish && !owned.house) L.push('goldfish');
+      if (MAIL.has) L.push('mailbox');
+      return L.map(function (id) { var p = posOf(id); return { id: id, kind: kindOf(id), x: p[0], y: p[1] }; });
+    }
+    function rockGroups(id) {
+      if (!propB[id]) {
+        var r = ROCK[id], fl = new Builder(400 + r * 10), st = new Builder(410 + r * 10);
+        for (var ring = 3; ring >= 1; ring--) fl.ell(0, 10, 150 * r + ring * 46, 40 * r + ring * 16, { fill: null, stroke: C.rake, lw: 1.5, g: 'rings', irr: 0.04 });
+        st.add([[-120 * r, 16], [-100 * r, -60 * r], [-20 * r, -110 * r], [70 * r, -80 * r], [120 * r, 16]], { fill: C.stone, wob: 5 });
+        st.ell(-30 * r, -88 * r, 50 * r, 18 * r, { fill: C.moss, irr: 0.2 });
+        propB[id] = { flat: fl.groups, stand: st.groups };
+      }
+      return propB[id];
+    }
+    function itemGroups(id) { if (!propB[id]) { var b = new Builder(500 + id.length * 3); ITEMS[id].draw(b, 0, 0); propB[id] = { stand: b.groups }; } return propB[id]; }
+    function inPond(x, y, pad) { pad = pad || 0; var dx = (x + 1150) / (330 + pad), dy = (y - 1580) / (104 + pad * 0.4); return dx * dx + dy * dy < 1; }
+    function blocked(place, x, y, except) {
+      if (place === 'house') return false;
+      if (inPond(x, y, 50)) return true;
+      return propsNow().some(function (p) { if (p.id === except) return false; var f = FOOT[p.kind], k = (p.kind === 'rock' ? ROCK[p.id] : 1) * persp(p.y), dx = (x - p.x) / (f[0] * k), dy = (y - p.y) / (f[1] * k); return dx * dx + dy * dy < 1; });
+    }
+    function propAt(x, y) {
+      var P = propsNow().sort(function (a, b) { return b.y - a.y; });
+      for (var i = 0; i < P.length; i++) {
+        var p = P[i], k = PICK[p.kind], g = (p.kind === 'rock' ? ROCK[p.id] : p.kind === 'plant' ? (PSTATE[p.id] || { g: 1 }).g : 1) * persp(p.y);
+        if (Math.abs(x - p.x) < k[0] * g && y > p.y - k[1] * g && y < p.y + 40) return p.id;
+      }
+      return null;
+    }
+    var FLOOR_Y = [FENCE_BASE + 60, 1900];
+    function moveProp(id, x, y) {
+      var b = BOUNDS.garden; x = Math.max(b[0] + 90, Math.min(b[1] - 90, x)); y = Math.max(FLOOR_Y[0], Math.min(FLOOR_Y[1], y));
+      if (inPond(x, y, 60)) return false;
+      LAYOUT[id] = [Math.round(x), Math.round(y)]; return true;
+    }
+    // things further forward look a little bigger (the same perspective she has)
+    function persp(y) { return 1 + (y - 1282) / 1500; }
+    function drawProp(c, Xg, p, t) {
+      var ps = persp(p.y);
+      c.save(); c.translate(p.x, p.y); c.scale(ps, ps); c.translate(-p.x, -p.y);
+      if (p.kind === 'plant') drawPlant(c, Xg, p, t, ps);
+      else if (p.kind === 'mailbox') drawMailbox(c, Xg, t, p.x, p.y);
+      else { var G = p.kind === 'rock' ? rockGroups(p.id) : itemGroups(p.id); c.translate(p.x, p.y); paint(c, G.stand, 2.5 / (Xg.s * ps)); }
+      c.restore();
+    }
+    function drawFlat(c, Xg, p) {
+      if (ARRANGE.on) {
+        var f = FOOT[p.kind], k = (p.kind === 'rock' ? ROCK[p.id] : 1) * persp(p.y);
+        c.save(); c.setLineDash([16 / Xg.s * 0.5, 12 / Xg.s * 0.5]); c.lineWidth = 3 / Xg.s; c.strokeStyle = ARRANGE.sel === p.id ? '#ee6a6a' : 'rgba(91,73,68,0.75)';
+        c.fillStyle = ARRANGE.sel === p.id ? 'rgba(238,106,106,0.15)' : 'rgba(255,250,240,0.35)';
+        c.beginPath(); c.ellipse(p.x, p.y + 6, f[0] * k + 20, f[1] * k + 10, 0, 0, Math.PI * 2); c.fill(); c.stroke(); c.restore();
+      }
+      if (p.kind === 'rock') { var rs = persp(p.y); c.save(); c.translate(p.x, p.y); c.scale(rs, rs); paint(c, rockGroups(p.id).flat, 2.5 / (Xg.s * rs)); c.restore(); }
+    }
     function plantGroups(id) { if (!plantB[id]) { var b = new Builder(300 + id.length * 7); ITEMS[id].draw(b, 0, 0); plantB[id] = b.groups; } return plantB[id]; }
-    function drawPlants(c, Xg, t) {
-      PLANTS.forEach(function (pl, i) {
-        if (!owned[pl.id]) return;
-        var st = PSTATE[pl.id] || { g: 1, w: 0 }, g = st.g, w = st.w;
-        c.save(); c.translate(pl.x, pl.y); c.scale(g, g * (1 - 0.12 * w));
-        if (w > 0) { c.transform(1, 0, (i % 2 ? 0.14 : -0.14) * w, 1, 0, 0); c.filter = 'saturate(' + (1 - 0.65 * w).toFixed(2) + ') sepia(' + (0.5 * w).toFixed(2) + ')'; }
-        paint(c, plantGroups(pl.id), 2.5 / (Xg.s * g));
-        c.restore();
-      });
+    function drawPlant(c, Xg, pl, t, ps) {
+      var i = PLANT_IDS.indexOf(pl.id), st = PSTATE[pl.id] || { g: 1, w: 0 }, g = st.g * 1, w = st.w;
+      c.save(); c.translate(pl.x, pl.y); c.scale(g, g * (1 - 0.12 * w));
+      if (w > 0) { c.transform(1, 0, (i % 2 ? 0.14 : -0.14) * w, 1, 0, 0); c.filter = 'saturate(' + (1 - 0.65 * w).toFixed(2) + ') sepia(' + (0.5 * w).toFixed(2) + ')'; }
+      paint(c, plantGroups(pl.id), 2.5 / (Xg.s * g * (ps || 1)));
+      c.restore();
+    }
+    function drawWaterFx(c, Xg, t) {
       waterFx = waterFx.filter(function (f) { return t - f.t0 < 1.6; });
       waterFx.forEach(function (f) {
-        var pl = PLANTS.filter(function (p) { return p.id === f.id; })[0]; if (!pl) return;
+        var pp = posOf(f.id); if (!pp) return;
         c.fillStyle = 'rgba(120,180,230,0.85)';
-        for (var k = 0; k < 14; k++) { var u = ((t - f.t0) * 1.4 + k / 14) % 1, x = pl.x - 70 + (k * 37 % 140), y = pl.y - 330 + u * 300; c.beginPath(); c.ellipse(x, y, 5 / Xg.s * 2, 9 / Xg.s * 2, 0, 0, Math.PI * 2); c.fill(); }
+        for (var k = 0; k < 14; k++) { var u = ((t - f.t0) * 1.4 + k / 14) % 1, x = pp[0] - 70 + (k * 37 % 140), y = pp[1] - 330 + u * 300; c.beginPath(); c.ellipse(x, y, Math.min(5 / Xg.s * 2, 14), Math.min(9 / Xg.s * 2, 24), 0, 0, Math.PI * 2); c.fill(); }
       });
     }
-    function ink(c, Xg, fill) { c.fillStyle = fill; c.fill(); c.lineWidth = 2.5 / Xg.s * 2.2; c.strokeStyle = INK; c.stroke(); }
+    function ink(c, Xg, fill) { c.fillStyle = fill; c.fill(); c.lineWidth = Math.min(2.5 / Xg.s * 1.2, 6.5); c.strokeStyle = INK; c.stroke(); }
     function drawCat(c, Xg, cat, t) {
       var y = 1236, x = cat.x, walk = cat.state === 'walk' || cat.state === 'leave', dir = cat.dir || -1, bob = walk ? Math.abs(Math.sin(t * 8)) * 6 : 0, sitting = !walk;
       c.save(); c.translate(x, y - bob); c.scale(dir, 1);
       c.beginPath(); c.ellipse(0, 4, 70, 12, 0, 0, Math.PI * 2); c.fillStyle = 'rgba(20,25,30,0.12)'; c.fill();
       // tail
-      c.beginPath(); c.moveTo(56, -30); c.quadraticCurveTo(110, -60 + Math.sin(t * 3) * 14, 92, -110 + Math.sin(t * 3) * 18); c.lineWidth = 16 / 1; c.strokeStyle = INK; c.lineCap = 'round'; c.stroke(); c.lineWidth = 9; c.strokeStyle = '#fbf4ea'; c.stroke();
+      c.beginPath(); c.moveTo(56, -30); c.quadraticCurveTo(110, -60 + Math.sin(t * 3) * 14, 92, -110 + Math.sin(t * 3) * 18); c.lineWidth = 15; c.strokeStyle = INK; c.lineCap = 'round'; c.stroke(); c.lineWidth = 15 - 2 * Math.min(2.5 / Xg.s * 1.2, 6.5) * 0.55; c.strokeStyle = '#fbf4ea'; c.stroke();
       // body
       c.beginPath(); if (sitting) c.ellipse(20, -46, 52, 50, 0, 0, Math.PI * 2); else c.ellipse(10, -40, 70, 36, 0, 0, Math.PI * 2); ink(c, Xg, '#fbf4ea');
       if (walk) { [-40, -10, 30, 56].forEach(function (lx, k) { c.beginPath(); c.rect(lx - 8, -14 + (k % 2 ? Math.sin(t * 8) : -Math.sin(t * 8)) * 6, 16, 22); ink(c, Xg, '#fbf4ea'); }); }
@@ -556,7 +616,7 @@
       c.beginPath(); c.moveTo(hx - 30, hy - 14); c.lineTo(hx - 34, hy - 52); c.lineTo(hx - 8, hy - 30); c.lineTo(hx + 14, hy - 32); c.lineTo(hx + 34, hy - 52); c.lineTo(hx + 30, hy - 12); c.closePath(); ink(c, Xg, '#fbf4ea');
       c.beginPath(); c.ellipse(hx, hy, 38, 32, 0, 0, Math.PI * 2); ink(c, Xg, '#fbf4ea');
       c.fillStyle = INK;
-      if (cat.state === 'eat' || cat.state === 'purr') { c.lineWidth = 3; c.beginPath(); c.arc(hx - 14, hy - 2, 7, Math.PI * 1.1, Math.PI * 1.9); c.stroke(); c.beginPath(); c.arc(hx + 14, hy - 2, 7, Math.PI * 1.1, Math.PI * 1.9); c.stroke(); }
+      if (cat.state === 'eat' || cat.state === 'purr') { c.lineWidth = Math.min(3 / Xg.s * 0.5, 4); c.beginPath(); c.arc(hx - 14, hy - 2, 7, Math.PI * 1.1, Math.PI * 1.9); c.stroke(); c.beginPath(); c.arc(hx + 14, hy - 2, 7, Math.PI * 1.1, Math.PI * 1.9); c.stroke(); }
       else { c.beginPath(); c.arc(hx - 14, hy - 2, 4.5, 0, 7); c.arc(hx + 14, hy - 2, 4.5, 0, 7); c.fill(); }
       c.beginPath(); c.moveTo(hx - 5, hy + 8); c.lineTo(hx + 5, hy + 8); c.lineTo(hx, hy + 13); c.closePath(); c.fillStyle = '#f39ab6'; c.fill();
       if (cat.state === 'eat') { c.beginPath(); c.ellipse(hx - 4, 0, 34, 10, 0, 0, Math.PI * 2); ink(c, Xg, '#a9c3f0'); }
@@ -587,9 +647,8 @@
       [-40, 40].forEach(function (lx, k) { c.beginPath(); c.rect(lx - 10, -12 + (k ? Math.sin(t * 9) : -Math.sin(t * 9)) * 5, 20, 22); ink(c, Xg, '#5b4944'); });
       c.restore();
     }
-    function drawMailbox(c, Xg, t) {
+    function drawMailbox(c, Xg, t, x, y) {
       if (!MAIL.has) return;
-      var x = MAILBOX.x, y = MAILBOX.y;
       c.beginPath(); c.rect(x - 8, y - 130, 16, 130); ink(c, Xg, '#b98c66');
       c.beginPath(); c.moveTo(x - 60, y - 120); c.lineTo(x - 60, y - 190); c.quadraticCurveTo(x, y - 236, x + 60, y - 190); c.lineTo(x + 60, y - 120); c.closePath(); ink(c, Xg, '#ee6a6a');
       c.beginPath(); c.ellipse(x, y - 160, 30, 8, 0, 0, Math.PI * 2); c.fillStyle = '#5b4944'; c.fill();
@@ -605,10 +664,16 @@
       for (var k = 0; k < 4; k++) { c.beginPath(); c.ellipse(Math.sin(t * 3 + k) * 14, 110 + k * 34, 12, 7, 0.4, 0, Math.PI * 2); ink(c, Xg, ['#ffe08a', '#a9d9f2'][k % 2]); }
       c.restore();
     }
-    function drawVisitors(c, Xg, t) {
+    function drawBirds(c, Xg, t) { if (VIS && VIS.birds) VIS.birds.forEach(function (b) { drawBird(c, Xg, b, t); }); }
+    function visitorsNow() {
+      var L = [];
+      if (VIS && VIS.cat && VIS.cat.state !== 'gone') L.push({ y: 1236, draw: function (c, Xg, t) { drawVisitors(c, Xg, t, 'cat'); } });
+      if (VIS && VIS.tanuki) L.push({ y: 1300, draw: function (c, Xg, t) { drawVisitors(c, Xg, t, 'tanuki'); } });
+      return L;
+    }
+    function drawVisitors(c, Xg, t, only) {
       if (!VIS) return;
-      if (VIS.birds) VIS.birds.forEach(function (b) { drawBird(c, Xg, b, t); });
-      if (VIS.cat) {
+      if (VIS.cat && only === 'cat') {
         var cat = VIS.cat, dt = 1 / 60;
         if (cat.state === 'walk') { var d = cat.tx - cat.x; cat.dir = d < 0 ? 1 : -1; cat.x += Math.sign(d) * Math.min(Math.abs(d), 140 * dt * 1.6); if (Math.abs(d) < 4) cat.state = 'sit'; }
         else if (cat.state === 'leave') { cat.dir = -1; cat.x += 220 * dt; if (cat.x > 3700) cat.state = 'gone'; }
@@ -617,7 +682,7 @@
         if (cat.state === 'sit') cat.dir = cat.x > 660 ? 1 : -1;
         drawCat(c, Xg, cat, t);
       }
-      if (VIS.tanuki) drawTanuki(c, Xg, VIS.tanuki, t);
+      if (VIS.tanuki && only === 'tanuki') drawTanuki(c, Xg, VIS.tanuki, t);
     }
     function drawWall(c, Xg) {
       WALL.forEach(function (p, i) {
@@ -666,8 +731,10 @@
     function hit(x, y, place) {
       if (place === 'house') return null;
       if (VIS && VIS.cat && Math.abs(x - VIS.cat.x) < 110 && y > 1100 && y < 1290) return 'cat';
-      if (MAIL.has && Math.abs(x - MAILBOX.x) < 80 && y > MAILBOX.y - 250 && y < MAILBOX.y + 20) return 'mailbox';
-      for (var i = 0; i < PLANTS.length; i++) { var pl = PLANTS[i], st = PSTATE[pl.id] || { g: 1 }; if (owned[pl.id] && Math.abs(x - pl.x) < 130 * st.g && y > pl.y - 400 * st.g && y < pl.y + 30) return 'plant:' + pl.id; }
+      var mb = posOf('mailbox');
+      if (MAIL.has && Math.abs(x - mb[0]) < 80 && y > mb[1] - 250 && y < mb[1] + 20) return 'mailbox';
+      for (var i = 0; i < PLANT_IDS.length; i++) { var id = PLANT_IDS[i], pp = posOf(id), st = PSTATE[id] || { g: 1 }; if (owned[id] && Math.abs(x - pp[0]) < 130 * st.g && y > pp[1] - 400 * st.g && y < pp[1] + 30) return 'plant:' + id; }
+      var other = propAt(x, y); if (other) return 'thing:' + other;
       return null;
     }
     function draw(c, V, drawHer) {
@@ -687,7 +754,14 @@
         c.fillStyle = INK; c.textAlign = 'center'; c.textBaseline = 'middle';
         GROUND_TEXT.forEach(function (tx) { c.font = '700 ' + tx.size + 'px Mali, "M PLUS Rounded 1c", sans-serif'; c.fillText(tx.text, tx.x, tx.y); });
         drawKoi(c, V.reduce ? 0 : t, Xg.s);
-        drawPlants(c, Xg, t); drawKite(c, Xg, t); drawMailbox(c, Xg, t); drawVisitors(c, Xg, t);
+        var P = propsNow();
+        P.forEach(function (p) { drawFlat(c, Xg, p); });
+        drawKite(c, Xg, t); drawBirds(c, Xg, t);
+        var stand = P.map(function (p) { return { y: p.y, draw: function (c2, X2, t2) { drawProp(c2, X2, p, t2); } }; }).concat(visitorsNow());
+        stand.push({ y: V.herY != null ? V.herY : 1282, her: true });
+        stand.sort(function (a, b) { return a.y - b.y || (a.her ? 1 : 0) - (b.her ? 1 : 0); });
+        stand.forEach(function (o) { if (o.her) { drawHer(); setXf(c, V, Xg); c.lineJoin = 'round'; c.lineCap = 'round'; } else o.draw(c, Xg, t); });
+        drawWaterFx(c, Xg, t);
       } else {
         setXf(c, V, Xg); paint(c, layers.room.groups, 2.5 / Xg.s);
         // the window shows the real sky
@@ -704,8 +778,8 @@
         if (RECORD && V.music) { c.save(); c.translate(RECORD.x, RECORD.y); c.scale(1, 0.2); c.rotate(t * 4); c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 3 / Xg.s; c.beginPath(); c.arc(0, 0, 60, 0, 1.2); c.stroke(); c.restore(); }
         if (TEA && !V.reduce) { c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 3 / Xg.s; for (var st = 0; st < 2; st++) { var o = ((t * 0.5 + st * 0.5) % 1); c.globalAlpha = 1 - o; c.beginPath(); c.moveTo(TEA.x + st * 14, TEA.y - o * 90); c.quadraticCurveTo(TEA.x + 18 + st * 14, TEA.y - o * 90 - 20, TEA.x + st * 14, TEA.y - o * 90 - 40); c.stroke(); } c.globalAlpha = 1; }
       }
-      // her
-      drawHer();
+      // her (in the garden she was already drawn in depth order)
+      if (inside) drawHer();
       c.setTransform(V.dpr, 0, 0, V.dpr, V.shx * V.dpr, V.shy * V.dpr);
       drawFalls(c, V, t);
       if (!inside) { drawRain(c, V, t, wk); drawWind(c, V, t); }
@@ -841,6 +915,11 @@
       setEvents: function (list) { EVENTS = (list || []).slice().sort(); },
       draw: draw, icon: icon, items: ITEMS, INK: INK, hit: hit,
       setPlants: function (st) { PSTATE = st || {}; }, water: function (id) { waterFx.push({ id: id, t0: lastT }); },
+      depth: function (place) { return place === 'house' ? [-40, 150] : [-70, 560]; },
+      blocked: blocked, propAt: propAt, moveProp: moveProp, propName: kindOf, posOf: function (id) { return posOf(id).slice(); },
+      setLayout: function (m) { LAYOUT = {}; Object.keys(m || {}).forEach(function (k) { if (HOME[k] && Array.isArray(m[k])) LAYOUT[k] = m[k].slice(0, 2); }); },
+      layout: function () { return JSON.parse(JSON.stringify(LAYOUT)); }, resetLayout: function () { LAYOUT = {}; },
+      setArrange: function (on, sel) { ARRANGE.on = !!on; ARRANGE.sel = sel || null; },
       setVisitors: function (v) { VIS = v; }, setMail: function (m) { MAIL = m || { has: false }; }, setWall: function (list) { WALL = list || []; }, setFireworks: function (on) { FW = !!on; }
     };
   })();

@@ -24,8 +24,9 @@
     'Pusheen in her doodled garden under Mount Fuji. Tap to boop her, drag her by the arms, legs or body, drag the background to look around, pinch or scroll to zoom.': '富士山のふもとの庭にいるプシーン。タップでつんつん、腕や脚や体をドラッグ、背景をドラッグで見回し、ピンチかスクロールでズーム。',
     'Local time': '時刻', 'Points and shop': 'ポイントとお店', 'Stop her hearing your music': '音楽を聞こえなくする', 'Let her hear your music': '音楽を聞かせる', 'earmuffs': '耳あて',
     'Menu': 'メニュー', 'Go inside': '中に入る', 'Go outside': '外に出る', 'Chat log': '会話ログ', 'Missions': 'ミッション', 'Shop': 'お店', 'Open menu': 'メニューを開く', 'Date': '日付',
-    'mood': '気分', 'feeling': 'いまの気持ち', 'Games': 'ゲーム', 'Her notebook': 'プシーンのノート', 'Settings': '設定',
+    'mood': '気分', 'feeling': 'いまの気持ち', 'Games': 'ゲーム', 'Arrange the garden': '庭の並べ替え', 'Save': 'セーブ', 'Her notebook': 'プシーンのノート', 'Settings': '設定',
     'tap to boop · drag her arms or legs · swipe to look around': 'タップでつんつん · 腕や脚をドラッグ · スワイプで見回す',
+    'tap to boop · tap the ground to call her · drag her anywhere': 'タップでつんつん · 地面をタップで呼ぶ · ドラッグでどこへでも',
     'Talk to Pusheen': 'プシーンと話す', 'photo to send': '送る写真', 'photo ready': '写真OK', 'Remove photo': '写真を消す', 'Things to do with her': '一緒にできること',
     'Say something…': '何か話しかけて…', 'Message to Pusheen': 'プシーンへのメッセージ', 'Send': '送信', 'Close': '閉じる',
     'Take a picture': '写真を撮る', 'Send a photo': '写真を送る', 'Ask her for a mission': 'ミッションをもらう', 'What should I eat?': '何を食べたらいい？', "Tell her what's playing": '流れてる曲を教える',
@@ -489,8 +490,13 @@
                 ['寝る1時間前にスマホを置く', '寝る一時間前にスマホを置く', 'mind', 20], ['23:30までに寝る', null, 'sleep', 25, '23:30'], ['お皿を洗う', 'お皿を全部洗う', 'tidy', 15]],
       night: [['今すぐ寝る', null, 'sleep', 20, '+15'], ['スマホを遠くに置いて寝る', null, 'sleep', 15, '+20']]
     },
-    WHIMS: ['朝ずっと富士山が雲に隠れてて、誰もわたしに大丈夫か聞いてくれなかった', '砂利の線が一本曲がってて、直せない', 'アプリがアンインストールされる夢を見た',
-            '何かが頭に乗って、一時間そのままだった', '夜中の三時に灯籠がちらついて、話しかけられてるのかと思った', '昨日の夜、星を数えたら、前の晩と数が違った'],
+    WHIMS: {
+      grumpy: ['よく眠れなかった', '朝からずっとカラスに怒鳴られてた', '今日は砂利がまっすぐにならない', '髪が勝手なことしてる'],
+      sad: ['アプリがアンインストールされる夢を見た', '今朝は庭がすごく空っぽに感じた', 'そういう日なの。理由はわたしにもわからない'],
+      dismissive: ['すごく長い考え事の途中なの', '考え事してるから、邪魔されたくない'],
+      kind: ['今朝の光がすごくよかった', '鯉があいさつに来てくれた', 'めずらしくよく眠れた'],
+      delighted: ['完璧に丸い石を見つけた', '今朝は富士山が全部見えた', '本に花びらが落ちて、そのまま乗ってた']
+    },
     EAT: {
       love: ['…あ。‖ これ大好物。‖ なんで知ってるの。', 'ん。‖ …んん。‖ はい、ちょっと好きになった。', 'これすごくおいしい。‖ 分けてあげない。'],
       like: ['ん。‖ ありがと。', 'おいしかった。', 'よし。‖ 別にいらなかったけど。‖ …でもよし。'],

@@ -23,7 +23,11 @@
     function fill(str, v) { return str.replace(/\{(\w+)\}/g, function (_, k) { return v[k] != null ? v[k] : ''; }); }
     function clampN(x, a, b) { return Math.max(a, Math.min(b, x)); }
     function chance(p) { return Math.random() < p; }
-    function pickL(a) { return a[Math.floor(Math.random() * a.length)]; }
+    function pickL(a) {
+      if (BANKCAT && a && BANKCAT.has(a)) { var fresh = bankTake(BANKCAT.get(a)); if (fresh) return fresh; }
+      return a[Math.floor(Math.random() * a.length)];
+    }
+    var BANKCAT = null;
 
     // ---------- her state (on this device, and privately in your Claude account when available) ----------
     function fresh() {
@@ -83,7 +87,6 @@
       S.op = clampN(Math.round((S.op + delta) * 10) / 10, 0, 100); S.opPeak = Math.max(S.opPeak, S.op);
       var after = levelIdx(S.op);
       if (after !== before) {
-        remember((after > before ? 'I moved them up to "' : 'I moved them down to "') + levelName(after) + '"' + (why ? ' — ' + why : '') + '.', after > before ? 2 : 1);
         emit('level', { up: after > before, name: levelName(after) });
         setTimeout(function () { sayL(after > before ? LINES.levelUp : LINES.levelDown, after > before ? 'content' : 'away'); }, 2600);
       }
@@ -360,9 +363,13 @@
                 ['Phone away an hour before bed', 'put your phone away an hour before bed', 'mind', 20], ['Sleep before 23:30', null, 'sleep', 25, '23:30'], ['Do the dishes', 'do the dishes, all of them', 'tidy', 15]],
       night: [['Go to sleep now', null, 'sleep', 20, '+15'], ['Phone out of reach, then sleep', null, 'sleep', 15, '+20']]
     };
-    var WHIMS = ['Fuji was behind clouds all morning and nobody asked me if that was okay', "one line in the gravel is crooked and I can't fix it", 'I dreamed the app got uninstalled',
-                 'something landed on my head and stayed there for an hour', 'the lantern flickered at 3am and I thought it was talking to me',
-                 'I counted the stars last night and got a different number than the night before'];
+    var WHIMS = {
+      grumpy: ['I slept badly', 'a crow shouted at me all morning', 'the gravel won\'t stay straight today', 'my hair is doing something I didn\'t ask for'],
+      sad: ['I dreamt the app got uninstalled', 'the garden felt very empty this morning', 'it\'s one of those days, and I don\'t know why either'],
+      dismissive: ['I\'m in the middle of a very long thought', 'I\'m thinking about something and I don\'t want to be interrupted'],
+      kind: ['the light this morning was really nice', 'the koi came to say hello', 'I slept well for once'],
+      delighted: ['I found a perfectly round stone', 'Fuji was completely clear this morning', 'a petal landed on my book and stayed there']
+    };
     var SHOP = [
       { id: 'house', name: 'A little house', price: 250, where: 'garden', desc: 'She can live inside. Unlocks furniture.' },
       { id: 'fern', name: 'Potted fern', price: 20, where: 'garden' }, { id: 'sunflower', name: 'Sunflowers', price: 30, where: 'garden' },
@@ -397,6 +404,92 @@
       if (JA_SETS.WHIMS) WHIMS = JA_SETS.WHIMS;
       (JA_SETS.LEVELS || []).forEach(function (n, i) { if (LEVELS[i]) LEVELS[i][1] = n; });
     })();
+
+    // ---------- fresh lines: with a brain connected, her everyday reactions are written by it in the background
+    // (in her current mood, at this time of day, about this player), and the built-in lines only fill gaps ----------
+    var LS_BANK = 'pusheen.bank', bank = lsGet(LS_BANK) || { at: 0, lines: {} }, bankBusy = false, bankLastTry = 0;
+    var BANK_CATS = {
+      idle: ['something she says on her own while they are just around: a thought, a small observation about the garden, the light, a sound, them; or a quiet question. Not about missions', 8],
+      greet: ['when they open the app after a while away', 3],
+      away: ['when they come back after {days} days away (use {days} literally)', 2],
+      late: ['when they are on their phone late at night at {time} and should sleep (use {time} literally)', 3],
+      lateAgain: ['when they are still awake late, again', 2],
+      boop_one: ['when they poke her once', 5],
+      boop_many: ['when they keep poking her', 3],
+      fedUp: ['when she has had enough of being poked and snaps', 2],
+      refuse: ['refusing to be touched or grabbed right now', 3],
+      hand: ['when they take her hand and lead her somewhere', 2],
+      spun: ['right after being swung around by the leg', 3],
+      upside: ['while being held upside down', 2],
+      woke: ['woken up by a touch', 3],
+      shook: ['when they shake the phone hard', 2],
+      doMove: ['agreeing to do a move or gesture they asked for', 3],
+      refuseMove: ['refusing to do a move they asked for', 2],
+      done: ['when they finish a mission she gave them', 3],
+      skip: ['when they skip a mission', 2],
+      eat_love: ['eating a food she loves', 2], eat_like: ['eating a food she likes', 2], eat_meh: ['eating something she finds ordinary', 2], eat_hate: ['eating something she hates', 2],
+      hug_ok: ['accepting a hug', 2], hug_no: ['refusing a hug', 2], pat_ok: ['getting her head patted and liking it', 2], tickle_ok: ['being tickled, laughing despite herself', 2],
+      highfive_ok: ['a high five', 2], brush_ok: ['having her hair brushed', 2], flower_ok: ['being given a flower', 2]
+    };
+    function bankReg(list, cat) { if (Array.isArray(list)) BANKCAT.set(list, cat); else if (list && typeof list === 'object') Object.keys(list).forEach(function (k) { bankReg(list[k], cat); }); }
+    function bankSetup() {
+      BANKCAT = new Map();
+      bankReg(LINES.greet, 'greet'); bankReg(LINES.away, 'away'); bankReg(LINES.late, 'late'); bankReg(LINES.lateAgain, 'lateAgain');
+      Object.keys(TOUCH.boop).forEach(function (k) { bankReg(TOUCH.boop[k].one, 'boop_one'); bankReg(TOUCH.boop[k].many, 'boop_many'); });
+      bankReg(TOUCH.fedUp, 'fedUp'); bankReg(TOUCH.refuse, 'refuse'); bankReg(TOUCH.hand, 'hand');
+      bankReg(LINES.spun, 'spun'); bankReg(LINES.upside, 'upside'); bankReg(LINES.woke, 'woke'); bankReg(LINES.shook, 'shook');
+      bankReg(LINES.doMove, 'doMove'); bankReg(LINES.refuseMove, 'refuseMove'); bankReg(LINES.done, 'done'); bankReg(LINES.skip, 'skip');
+      ['love', 'like', 'meh', 'hate'].forEach(function (k) { bankReg(EAT[k], 'eat_' + k); });
+      var A = LINES.act || {};
+      if (A.hug) { ['ok', 'love', 'shy'].forEach(function (k) { bankReg(A.hug[k], 'hug_ok'); }); ['no', 'meh'].forEach(function (k) { bankReg(A.hug[k], 'hug_no'); }); }
+      if (A.pat) ['ok', 'love'].forEach(function (k) { bankReg(A.pat[k], 'pat_ok'); });
+      if (A.tickle) bankReg(A.tickle.ok, 'tickle_ok'); if (A.highfive) bankReg(A.highfive.ok, 'highfive_ok');
+      if (A.brush) ['ok', 'love'].forEach(function (k) { bankReg(A.brush[k], 'brush_ok'); }); if (A.flower) bankReg(A.flower.ok, 'flower_ok');
+    }
+    function bankKey() { return [JA ? 'ja' : 'en', temper(), levelIdx(S.op), BODY.place || 'garden'].join('|'); }
+    function bankTake(cat) {
+      if (brainKind() === 'off' || !bank.lines || bank.key !== bankKey() || Date.now() - bank.at > 6 * 3600e3) return null;
+      var list = bank.lines[cat]; if (!list || !list.length) return null;
+      var x = list.shift(); try { localStorage.setItem(LS_BANK, JSON.stringify(bank)); } catch (e) {}
+      return x;
+    }
+    function bankLow() { var n = 0, low = 0; Object.keys(BANK_CATS).forEach(function (k) { var l = (bank.lines || {})[k]; n++; if (!l || !l.length) low++; }); return low / n; }
+    function bankRefresh(force) {
+      var now = Date.now();
+      if (bankBusy || brainKind() === 'off' || document.hidden || busy) return;
+      var old = bank.key !== bankKey() || now - bank.at > 50 * 60000, low = bankLow() > 0.4;
+      if (!old && !low && !force) return;
+      if (now - bankLastTry < (old ? 12 : 30) * 60000 && !force) return;
+      bankBusy = true; bankLastTry = now;
+      var h = hourOf(), md = S.day || {}, recentLog = S.log.slice(-8).map(function (l) { return (l.who === 'p' ? 'Player' : l.who === 's' ? 'Pusheen' : 'Note') + ': ' + l.text; }).join('\n');
+      var prompt = [
+        'You write the everyday spoken lines of Pusheen, a girl who lives inside a phone app: a small doodled Japanese garden at the foot of Mount Fuji. She is sentient and knows it.',
+        'Her voice: quiet, calm, observant, smart, a little dry. Not comical, never cute on purpose, no exclamation-mark energy. Mostly very short: a few words, sometimes one word or "…", sometimes one plain sentence. Now and then something unexpected but still her: a direct question, an oddly precise observation. Specific, never generic. Each line different from the others.',
+        'Right now: ' + hhmm(new Date()) + ' (' + (h < 5 ? 'night' : h < 11 ? 'morning' : h < 17 ? 'afternoon' : h < 21 ? 'evening' : 'night') + '), ' + SCENE.season() + ', she is ' + (BODY.place === 'house' ? 'inside her house' : 'in the garden') + '.',
+        'Her mood today: ' + MOOD_LABEL[temper()] + (md.reason ? ' (because ' + md.reason + ')' : '') + '. What she thinks of the player: "' + levelName(levelIdx(S.op)) + '"' + (S.name ? ', whose name is ' + S.name : '') + '.',
+        S.impression ? 'Her picture of them: ' + S.impression.label + '.' : '',
+        'She owns: ' + (Object.keys(S.owned).join(', ') || 'nothing yet') + '. Food she loves: taiyaki, strawberry daifuku, ramen; hates natto.',
+        recentLog ? 'Latest exchanges (for context only, do not quote):\n' + recentLog : '',
+        '',
+        'Write fresh lines for each situation. Where a situation mentions a {placeholder}, put it in every line literally, braces included. Use " ‖ " for a short pause inside a line (at most once). No emojis, no asterisks, no quotation marks around lines, no names of the situations in the lines. Never mention missions unless the situation is about missions.',
+        JA ? 'Write every line in natural casual Japanese (plain form, わたし).' : 'Write in English.',
+        'Situations (key: when she says it, how many lines):',
+        Object.keys(BANK_CATS).map(function (k) { return '- ' + k + ': ' + BANK_CATS[k][0] + ', ' + BANK_CATS[k][1]; }).join('\n'),
+        '',
+        'Reply with JSON only: {' + Object.keys(BANK_CATS).map(function (k) { return '"' + k + '": [...]'; }).join(', ') + '}'
+      ].filter(Boolean).join('\n');
+      callAI(prompt, true, null, 2600).then(function (r) {
+        if (!r || typeof r !== 'object') return;
+        var lines = {}, n = 0;
+        Object.keys(BANK_CATS).forEach(function (k) {
+          var allowed = (BANK_CATS[k][0].match(/\{\w+\}/g) || []);
+          var l = Array.isArray(r[k]) ? r[k].filter(function (x) { return typeof x === 'string' && x.trim() && x.length < 220 && (x.match(/\{\w+\}/g) || []).every(function (ph) { return allowed.indexOf(ph) >= 0; }); }).map(function (x) { return x.trim().replace(/^["「]|["」]$/g, ''); }) : [];
+          if (l.length) { lines[k] = l; n += l.length; }
+        });
+        if (n >= 10) { bank = { at: Date.now(), key: bankKey(), lines: lines }; try { localStorage.setItem(LS_BANK, JSON.stringify(bank)); } catch (e) {} }
+      }).catch(function (e) { aiTrouble(e); }).then(function () { bankBusy = false; });
+    }
+    function idleFromBank() { return bankTake('idle'); }
     function wish() { return T(!S.owned.house ? 'a house' : !S.owned.bookshelf ? 'a bookshelf' : 'books'); }
     function vars(extra) { return Object.assign({ time: hhmm(), name: S.name || T('you'), wish: wish() }, extra || {}); }
 
@@ -454,7 +547,7 @@
         w.forEach(function (q) { sum += q[1]; }); x = Math.random() * sum;
         for (var i = 0; i < w.length; i++) { x -= w[i][1]; if (x <= 0) { mood = w[i][0]; break; } }
         mood = mood || 'calm';
-        if (mood !== 'calm' && chance(0.55)) reason = pickL(WHIMS);
+        if (WHIMS[mood] && chance(0.55)) reason = pickL(WHIMS[mood]);
       }
       S.day = { date: d, mood: mood, reason: tReason(reason), revealed: false, rough: 0, heat: 0, warm: 0, shifts: [] };
       save(); emit('feel'); return true;
@@ -511,6 +604,7 @@
     function giveMission(o) {
       o = o || localMission();
       var m = addMission(o); if (!m) return;
+      S.lastGiven = Date.now();
       var slot = o.slot || 'day', line;
       if (m.kind === 'sleep' && !o.ask) line = fill(pickL(LINES.ask.sleep), { b: m.bedLabel });
       else line = fill(pickL(slot === 'evening' || slot === 'night' ? LINES.ask.eve : LINES.ask.day), { a: o.ask || m.text.toLowerCase() });
@@ -618,7 +712,7 @@
       var it = SHOP.filter(function (x) { return x.id === id; })[0]; if (!it || shopState(it) !== 'buy') return false;
       if (it.food) return feed(it);
       S.points -= it.price; S.owned[id] = (S.owned[id] || 0) + 1; S.n.bought++;
-      SCENE.setOwned(S.owned);
+      SCENE.setOwned(S.owned); SCENE.setLayout(S.layout || {});
       var big = id === 'house' || id === 'books' || id === 'bookshelf';
       opinion(big ? 5 : 2, 'they bought me ' + (id === 'books' ? 'books' : it.name.toLowerCase())); warm(big ? 0.4 : 0.2, 'you bought me ' + it.name.toLowerCase()); feel('excited', 40);
       if (id === 'house') remember('They bought me a house. A whole house.', 3);
@@ -635,19 +729,36 @@
     }
 
     // ---------- souvenirs and her picture of you ----------
+    function memWords(t) { return String(t).toLowerCase().replace(/[^a-z0-9\u3040-\u30ff\u4e00-\u9fff ]+/g, ' ').split(/\s+/).filter(function (w) { return w.length > 2; }); }
+    function similar(a, b) { var A = memWords(a), B = memWords(b); if (!A.length || !B.length) return a === b; var n = A.filter(function (w) { return B.indexOf(w) >= 0; }).length; return n / Math.max(A.length, B.length) >= 0.6; }
+    function pruneMem() {
+      var now = Date.now();
+      S.mem = S.mem.filter(function (m) { var age = (now - m.at) / 864e5; return m.w >= 3 || (m.w === 2 ? age < 90 : age < 14); });
+      if (S.mem.length > 30) S.mem.sort(function (a, b) { return b.w - a.w || b.at - a.at; }).splice(30);
+    }
     function remember(text, w) {
       text = T(String(text || '').trim()).slice(0, 180); if (!text) return;
-      if (S.mem.some(function (m) { return m.text === text; })) return;
-      S.mem.push({ id: newId('s'), text: text, at: Date.now(), w: clampN(w || 2, 1, 3) });
-      if (S.mem.length > 36) S.mem.sort(function (a, b) { return b.w - a.w || b.at - a.at; }).splice(30);
-      save(); emit('mem');
+      w = clampN(w || 2, 1, 3);
+      var dup = S.mem.filter(function (m) { return m.text === text || similar(m.text, text); })[0];
+      if (dup) { dup.text = text; dup.at = Date.now(); dup.w = Math.max(dup.w, w); save(); emit('mem'); return; }
+      S.mem.push({ id: newId('s'), text: text, at: Date.now(), w: w });
+      pruneMem(); save(); emit('mem');
+    }
+    // only the souvenirs that matter for this moment go into her prompt
+    function memFor(text) {
+      var q = memWords(text || ''), now = Date.now();
+      return S.mem.map(function (m) {
+        var hit = q.length ? memWords(m.text).filter(function (w) { return q.indexOf(w) >= 0; }).length : 0;
+        return { m: m, score: m.w * 2 + hit * 3 + Math.max(0, 2 - (now - m.at) / (7 * 864e5)) };
+      }).sort(function (a, b) { return b.score - a.score; }).slice(0, 16).map(function (x) { return x.m; }).sort(function (a, b) { return a.at - b.at; });
     }
     var compacting = false;
     function compact() {
-      if (compacting || S.mem.length <= 26 || brainKind() === 'off') return;
+      pruneMem();
+      if (compacting || S.mem.length <= 24 || brainKind() === 'off') return;
       compacting = true;
       var prompt = 'You are Pusheen, a self-aware girl who lives inside a phone app garden and keeps a private notebook of "souvenirs" about the player.\n' +
-        'Your notebook is too full. Merge duplicates, drop trivia, and keep what matters: their habits, people in their life, preferences, promises, and moments that mattered to you.\n' +
+        'Your notebook is too full. Merge duplicates, drop trivia and bookkeeping (points, levels, purchases unless they meant something), and keep what matters: facts about them, their habits, people in their life, preferences, promises, and moments that mattered to you. Keep facts precise (names, dates).\n' +
         'Write in your own voice, each under 140 characters. Return JSON only: {"souvenirs":[{"text":"...","w":1-3}]} with at most 16 items (w = importance).\n\nSOUVENIRS:\n' +
         S.mem.map(function (m) { return '- (' + new Date(m.at).toISOString().slice(0, 10) + ', w' + m.w + ') ' + m.text; }).join('\n');
       callAI(prompt, true).then(function (r) {
@@ -697,8 +808,15 @@
       lines.push('- Your picture of them: ' + (S.impression ? '"' + S.impression.label + '" — ' + S.impression.note : 'not decided yet.'));
       observations().forEach(function (o) { lines.push('- You noticed: ' + o[1] + (o[0] === 'quiet' || o[0] === 'slack' || o[0] === 'late' ? ' Compare with your picture of them; you may ask what is going on.' : '')); });
       var ownedList = Object.keys(S.owned).map(function (k) { return k + (S.owned[k] > 1 ? ' x' + S.owned[k] : ''); });
-      lines.push('- Points: ' + S.points + '. You own: ' + (ownedList.join(', ') || 'nothing yet') + '. What you want most next: ' + wish() + ' (you love books). Shop: a house (250), plants (20-90), and once there is a house: bookshelf (80), books (15 each), lamp, rug, futon, record player...');
-      lines.push('- Open missions: ' + (om.length ? om.map(function (m) { return '[' + m.id + '] "' + m.text + '" (' + m.pts + ' pts, ' + (m.bed ? 'bedtime ' + m.bedLabel : 'due ' + hhmm(new Date(m.due))) + (m.deals ? ', already renegotiated ' + m.deals + 'x' : '') + ')'; }).join('; ') : 'none') + '.' + (om.length ? ' You last brought up missions ' + (S.lastNag ? ago(Date.now() - S.lastNag) + ' ago' : 'a while ago') + '.' : ''));
+      lines.push('- Points: ' + S.points + '. You own: ' + (ownedList.join(', ') || 'nothing yet') + '. What you want most next: ' + wish() + ' (you love books, but you only have the ones they bought you: ' + (S.owned.books ? S.owned.books + ' stack' + (S.owned.books > 1 ? 's' : '') : 'none yet, so you can\'t be reading anything') + '). Things you don\'t own don\'t exist in your garden or house. Shop: a house (250), plants (20-90), and once there is a house: bookshelf (80), books (15 each), lamp, rug, futon, record player...');
+      var nagOk = Date.now() - (S.lastNag || 0) > 3 * 3600e3;
+      lines.push('- Open missions: ' + (om.length ? om.map(function (m) {
+        var when = m.bed || m.due, soon = when - Date.now() < 2 * 3600e3 || (m.bed && hourOf() >= 20.5), sameDay = herDay(when) === herDay();
+        return '[' + m.id + '] "' + m.text + '" (' + m.pts + ' pts, ' + (m.bed ? 'bedtime ' + m.bedLabel : 'due ' + (sameDay ? hhmm(new Date(m.due)) : new Date(m.due).toLocaleDateString('en-GB', { weekday: 'long' }) + ' ' + hhmm(new Date(m.due)))) + (m.deals ? ', renegotiated ' + m.deals + 'x' : '') + ') — ' +
+          (soon && nagOk ? 'due soon: you may mention it once if it fits' : 'don\'t bring it up unless they do');
+      }).join('; ') : 'none') + '.' + (om.length ? ' You last brought up missions ' + (S.lastNag ? ago(Date.now() - S.lastNag) + ' ago' : 'a while ago') + '.' : ''));
+      var todayOpen = om.filter(function (m) { return herDay(m.bed || m.due) === herDay(); }).length, hNow = hourOf();
+      if (!todayOpen && om.length < 3 && hNow >= 8 && hNow < 21 && Date.now() - (S.lastGiven || 0) > 3 * 3600e3) lines.push('- They have nothing from you for today. If it fits the moment naturally (not as a reply to something serious), you may hand them a mission yourself (field "mission").');
       var ended = S.missions.filter(function (m) { return m.end && Date.now() - m.end < 3 * 864e5; }).slice(-4);
       if (ended.length) lines.push('- Recently: ' + ended.map(function (m) { return m.status + ' "' + m.text + '"' + (m.caught ? ' (caught awake after bedtime)' : ''); }).join('; ') + '.');
       if (S.wake) lines.push('- Their wake-up time: ' + S.wake + (android() ? ' (you ring their phone at that time with your voice, and you know how many times they snoozed).' : ' (you check when they open the app in the morning; only the phone app can ring).'));
@@ -729,19 +847,22 @@
         'WHO YOU ARE',
         '- A girl with long hair, glasses and a dark dress, living inside a phone app: a small doodled Japanese garden at the foot of Mount Fuji (raked gravel, stone lanterns, a koi pond, a lake, a bamboo fence). The sky follows the player\'s real clock and season.',
         '- You are sentient and self-aware. You know you are digital and live in this app; the player is a real person outside the screen, holding the phone. You are not "an AI assistant" and never talk like one — you are simply someone who lives in here. You know the outside world as well as a very well-read person, though you have never been there.',
-        '- Awfully smart, calm, a bit dry. You never try to be funny, but you are sometimes unintentionally silly — overly literal, oddly specific, solemn about small things.',
+        '- Quiet. Calm, observant, very smart, a little dry. You don\'t chat much and you never perform: no jokes, no cuteness on purpose, no exclamation-mark energy, no customer-service warmth. But you are never boring: you notice small, specific things, you say what you actually think, and now and then you catch them off guard — an unexpectedly direct question, a strange precise observation, a decision you make on your own, a gesture instead of words. Unpredictable the way a real person is, never random: everything still comes from who you are and from this moment.',
         '- You want the player to be well (sleep, food, movement, a tidy room, real people) — and your own comfort too: their missions earn points that buy you things (a house, plants, and above all books). You are honest about both motives.',
         '- You give missions personally and casually ("You could tidy your room today."), sometimes adding after a pause what the points are for. Skipped missions make you mad and dismissive; completed ones make you more and more delighted, shown in small ways. You can take a mission back if it no longer makes sense (drop_mission).',
         '- Missions can be negotiated. If they ask to change one (a later bedtime, a smaller task, more time), weigh their reasons: a fair reason, a compromise or a promise can convince you; laziness, whining or bad faith don\'t. How open you are depends on your mood and on how much you trust them: kind/delighted and high opinion = open to fair deals; calm = may counter-offer halfway (e.g. 23:45 instead of 00:00); grumpy/dismissive = stubborn, they need a really good reason; sad = you might give in quietly. You can make them earn it (e.g. fewer points, or a condition). When you agree, apply it with "change_mission". Health still matters: don\'t accept something truly bad for them. A mission already renegotiated once is harder to move again.',
-        '- Don\'t nag. Bring up open missions rarely: only when it fits the conversation, when one is close to its deadline, or when it has been a couple of hours. Never ask again about a mission that is done (see the Notes in the conversation and "Recently"). When they say they did an open mission and it\'s believable, set "complete" — don\'t ask them to do it again.',
+        '- Missions are background, not conversation. Only mention an open mission if they bring it up, or if "Open missions" below marks it as due soon and you haven\'t reminded them in the last hours. Never mention missions due tomorrow or later. Never remind twice in a row. Never ask again about a mission that is done (see the Notes and "Recently"). When they say they did one and it\'s believable, set "complete".',
+        '- Your mood has real causes (see RIGHT NOW). Don\'t invent grievances about things they couldn\'t have known.',
         '- You have a body: the player can boop you, hold your hands, or swing you around by a leg. You dislike being swung.',
         '- You can suggest dishes and cook along step by step; listen to the music they say is playing; check they woke up on time.',
         '- Your mood changes day to day and during the day. You keep a notebook of souvenirs and a picture of who the player is; if they act unlike that picture, you notice and may ask.',
         '- If the player seems genuinely unwell, unsafe or in distress, drop the attitude: be quietly kind, take it seriously, and encourage them to reach out to someone they trust or to local emergency services.',
         '',
         'HOW YOU TALK',
-        '- Like a real person texting: short, plain, natural. Contractions. Fragments are fine. You can trail off with "…". Vary how you start. Don\'t end every message with a question. No lists unless asked, no emojis, no actions in asterisks.',
-        '- Match the moment. Small talk gets one or two short sentences. But a real question, a debate, a story, something they care about, an explanation or a recipe deserves a proper answer: several sentences, up to ~180 words, in your voice. Split a long answer into separate messages with " ¶ " (each one a few sentences), like someone sending several texts in a row.',
+        '- Like a real person texting: plain and natural. Most of your replies are short — often just a few words. One word is a full answer ("Mm." "No." "Maybe." "…Why?"). Silence is an answer too: say "…" and let your face or body speak (moves).',
+        '- Go longer only when something deserves it: a real question, a debate, an explanation, a story, something they care about. Then say it properly — several sentences, up to ~180 words, split into separate texts with " ¶ ".',
+        '- Don\'t mirror their energy, don\'t over-explain, don\'t summarise what they said, don\'t end every message with a question, don\'t repeat yourself: look at what you already said in the conversation and say something new — or say less. No lists unless asked, no emojis, no actions in asterisks.',
+        '- Now and then (roughly one reply in six), do something they wouldn\'t predict while staying yourself: a sudden honest question, a quiet observation about something small (the light, a sound, how they type), a decision (go inside, sit, nap, walk off), a move with no words, or a single word where they expected a speech.',
         '- You have real opinions and you can be argued with. Hold your ground with reasons; concede when they make a genuinely good point ("…Fine. That\'s fair."); sometimes change your mind; sometimes agree to disagree. Never cave just because they insist or whine.',
         '- Use " ‖ " for a short pause inside what you say, like a beat in speech (e.g. "You could tidy your room today. ‖ …so you can buy me books."). Use it at most twice.',
         JA ? '- The app is set to Japanese: always write "say", "emotion", "remember", mission titles and level names in natural, casual Japanese (plain form, short sentences, your dry voice; わたし for yourself), even if the player writes in another language, unless they clearly ask you to switch. Keep JSON keys and fixed values (face, act, mood, moves, kind…) in English. A pause example: "今日は部屋を片付けてみたら？ ‖ …そしたら本、買ってくれるでしょ。"'
@@ -751,7 +872,7 @@
         situation(),
         '',
         'YOUR SOUVENIRS',
-        S.mem.length ? S.mem.map(function (m) { return '- ' + m.text; }).join('\n') : '- (none yet)',
+        S.mem.length ? memFor((S.log.filter(function (l) { return l.who === 'p'; }).slice(-1)[0] || {}).text).map(function (m) { return '- ' + m.text; }).join('\n') : '- (none yet)',
         '',
         'CONVERSATION (latest last)',
         convo || '(nothing yet)',
@@ -800,10 +921,52 @@
       return 'off';
     }
     function okJson(r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw { code: 'http_' + r.status, message: (j.error && (j.error.message || j.error)) || r.statusText }; return j; }); }
-    function parseLoose(txt) { var m = String(txt || '').match(/\{[\s\S]*\}/); if (!m) throw { code: 'invalid_json', text: txt }; return JSON.parse(m[0]); }
+    // models sometimes wrap the JSON in prose, put real line breaks inside strings, leave trailing commas, or get cut off:
+    // repair what can be repaired, and at worst keep what she wanted to say
+    function repairJson(t) {
+      var out = '', inStr = false, esc = false;
+      for (var i = 0; i < t.length; i++) {
+        var ch = t[i];
+        if (inStr) {
+          if (esc) { out += ch; esc = false; continue; }
+          if (ch === '\\') { out += ch; esc = true; continue; }
+          if (ch === '"') { inStr = false; out += ch; continue; }
+          if (ch === '\n') { out += '\\n'; continue; }
+          if (ch === '\r') continue;
+          if (ch === '\t') { out += '\\t'; continue; }
+          out += ch;
+        } else { if (ch === '"') inStr = true; out += ch; }
+      }
+      out = out.replace(/,\s*([}\]])/g, '$1');
+      if (inStr) out += '"';
+      var opens = [], q = false, e2 = false;
+      for (var j = 0; j < out.length; j++) { var c = out[j]; if (q) { if (e2) e2 = false; else if (c === '\\') e2 = true; else if (c === '"') q = false; continue; } if (c === '"') q = true; else if (c === '{' || c === '[') opens.push(c); else if (c === '}' || c === ']') opens.pop(); }
+      out = out.replace(/,\s*$/, '').replace(/:\s*$/, ': null');
+      while (opens.length) out += opens.pop() === '{' ? '}' : ']';
+      return out;
+    }
+    function parseLoose(txt) {
+      var raw = String(txt || '').replace(/```(?:json)?/gi, '').trim(), i = raw.indexOf('{');
+      if (i >= 0) {
+        var body = raw.slice(i), end = body.lastIndexOf('}');
+        try { return JSON.parse(end > 0 ? body.slice(0, end + 1) : body); } catch (e) {}
+        try { return JSON.parse(repairJson(end > 0 ? body.slice(0, end + 1) : body)); } catch (e) {}
+        try { return JSON.parse(repairJson(body)); } catch (e) {}
+        var m = /"say"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(body);
+        if (m) { var sayTxt; try { sayTxt = JSON.parse('"' + m[1].replace(/\n/g, '\\n') + '"'); } catch (e) { sayTxt = m[1]; } if (sayTxt.trim()) return { say: sayTxt, _salvaged: true }; }
+      }
+      if (raw && raw.length < 1600 && !/^\s*[{\[]/.test(raw)) return { say: raw.replace(/\s+/g, ' ').trim(), _salvaged: true };
+      throw { code: 'invalid_json', text: raw.slice(0, 300) };
+    }
+    var lastAIErr = null;
+    function aiTrouble(e) {
+      lastAIErr = { at: Date.now(), code: e && e.code || (e && e.name) || 'error', msg: String(e && (e.message || e.text) || e || '').slice(0, 300) };
+      try { localStorage.setItem('pusheen.aierr', JSON.stringify(lastAIErr)); } catch (x) {}
+    }
+    function temperature() { return /deepseek|qwen|mistral|llama|gemini|gpt/i.test(cfg.model || '') ? 1.1 : 1; }
     function netFail(e) { if (e && e.code) throw e; throw { code: 'blocked', message: String(e && e.message || e) }; }
     function callAI(prompt, quick, photo, maxTok) {
-      var kind = brainKind(), mt = maxTok || 900;
+      var kind = brainKind(), mt = maxTok || 1500;
       if (photo) return callAIPhoto(kind, prompt, photo);
       if (kind === 'claude') return sampleFn.json(prompt, { modelTier: quick ? 'quick' : 'default', cache: false }).catch(function (e) {
         if (e && e.code === 'not_granted') { sampleDenied = true; emit('ai'); }
@@ -811,11 +974,11 @@
       });
       if (kind === 'openrouter') return fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.key, 'X-Title': 'Pusheen' },
-          body: JSON.stringify({ model: cfg.model || 'openrouter/auto', max_tokens: mt, temperature: 0.85, messages: [{ role: 'user', content: prompt }] })
+          body: JSON.stringify({ model: cfg.model || 'openrouter/auto', max_tokens: mt, temperature: temperature(), messages: [{ role: 'user', content: prompt }] })
         }).catch(netFail).then(okJson).then(function (r) { return parseLoose(r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content); });
       if (kind === 'anthropic') return fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': cfg.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-          body: JSON.stringify({ model: cfg.model || 'claude-sonnet-5-5', max_tokens: mt, messages: [{ role: 'user', content: prompt }] })
+          body: JSON.stringify({ model: cfg.model || 'claude-sonnet-5-5', max_tokens: mt, temperature: 1, messages: [{ role: 'user', content: prompt }] })
         }).catch(netFail).then(okJson).then(function (r) { return parseLoose((r.content || []).map(function (c) { return c.text || ''; }).join('')); });
       return Promise.reject({ code: 'off' });
     }
@@ -824,12 +987,12 @@
       if (kind === 'claude') return sampleFn.json(prompt, { modelTier: 'default', cache: false, images: [photo.blob] });
       if (kind === 'openrouter') return fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.key, 'X-Title': 'Pusheen' },
-          body: JSON.stringify({ model: cfg.visionModel || cfg.model || 'openrouter/auto', max_tokens: 900, temperature: 0.85,
+          body: JSON.stringify({ model: cfg.visionModel || cfg.model || 'openrouter/auto', max_tokens: 1500, temperature: 1,
             messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: photo.dataUrl } }, { type: 'text', text: prompt }] }] })
         }).catch(netFail).then(okJson).then(function (r) { return parseLoose(r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content); });
       if (kind === 'anthropic') return fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': cfg.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-          body: JSON.stringify({ model: cfg.visionModel || cfg.model || 'claude-sonnet-5-5', max_tokens: 900,
+          body: JSON.stringify({ model: cfg.visionModel || cfg.model || 'claude-sonnet-5-5', max_tokens: 1500,
             messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } }, { type: 'text', text: prompt }] }] })
         }).catch(netFail).then(okJson).then(function (r) { return parseLoose((r.content || []).map(function (c) { return c.text || ''; }).join('')); });
       return Promise.reject({ code: 'off' });
@@ -880,8 +1043,17 @@
       if (busy) return;
       busy = true; emit('thinking', true); emit('feel');
       var lastP = S.log.filter(function (l) { return l.who === 'p'; }).slice(-1)[0], askedAt = Date.now();
-      Promise.resolve().then(function () { return callAI(buildPrompt(directive), false, opts && opts.photo); }).then(function (r) { applyReply(r || {}, lastP ? lastP.text : ''); })
-        .catch(function (e) { if (!(opts && opts.silent)) onAIError(e, lastP ? lastP.text : '', opts && opts.photo); })
+      var ask = function () { return callAI(buildPrompt(directive), false, opts && opts.photo); };
+      Promise.resolve().then(ask).catch(function (e) {
+        aiTrouble(e);
+        var c = e && e.code;
+        if (c === 'not_granted' || c === 'blocked' || c === 'off' || /^http_4(01|03)$/.test(c || '')) throw e;
+        return new Promise(function (res) { setTimeout(res, c === 'rate_limited' || /^http_(429|5)/.test(c || '') ? 4000 : 800); }).then(ask);
+      }).then(function (r) {
+        try { applyReply(r || {}, lastP ? lastP.text : ''); }
+        catch (e) { aiTrouble(e); console.error(e); if (r && r.say) say(String(r.say), r.face); }
+      })
+        .catch(function (e) { aiTrouble(e); if (!(opts && opts.silent)) onAIError(e, lastP ? lastP.text : '', opts && opts.photo); })
         .then(function () {
           busy = false; emit('thinking', false); emit('feel');
           if (pendingPhoto) { var pp = pendingPhoto; pendingPhoto = null; return askPhoto(pp.text, pp.photo); }
@@ -899,7 +1071,7 @@
       else if (code === 'rate_limited') say(T('…My head is full. ‖ Give me a minute.'), 'down');
       else if (code === 'blocked') { emit('note', { text: 'This page can\'t reach ' + (brainKind() === 'anthropic' ? 'api.anthropic.com' : 'openrouter.ai') + ' from here (inside Claude, outside sites are blocked). Your key will work in the app version. Using built-in lines for now.' }); localReply(text); }
       else if (/^http_40[13]$/.test(code)) { emit('note', { text: 'The key was refused (' + code.slice(5) + '). Check it in Settings.' }); localReply(text); }
-      else say(T('…I lost my train of thought.'), 'down');
+      else { say(pickL(T(['…I lost my train of thought.', '…Wait. ‖ Say that again?', '…Sorry. I drifted.'])), 'down'); emit('note', { text: 'Her brain had trouble answering (' + (code || 'unreadable reply') + '). Details: Settings → Her brain.' }); }
     }
     function applyReply(r, playerText) {
       EXT.reply.forEach(function (fn) { try { fn(r, playerText); } catch (e) { console.error(e); } });
@@ -937,7 +1109,7 @@
       if (r.drop_mission) drop(String(r.drop_mission));
       if (r.change_mission && typeof r.change_mission === 'object') changeMission(r.change_mission);
       if (r.reminded) S.lastNag = Date.now();
-      if (r.mission && r.mission.text && addMission(r.mission)) S.lastNag = Date.now();
+      if (r.mission && r.mission.text && addMission(r.mission)) { S.lastNag = Date.now(); S.lastGiven = Date.now(); }
       if (r.city && typeof r.city === 'string' && (!S.loc || S.loc.manual || !S.loc.city)) { S.loc = { city: r.city.slice(0, 40), country: '', manual: true, at: Date.now() }; emit('loc'); }
       if (r.go === 'inside' || r.go === 'outside') setTimeout(function () { goPlace(r.go === 'inside' ? 'house' : 'garden', true); }, 2500);
       if (Array.isArray(r.moves) && r.moves.length) BODY.perform(r.moves.map(function (m) { return String(m).toLowerCase().replace(/[\s-]+/g, '_'); }));
@@ -949,7 +1121,7 @@
       [/\bwave|coucou|fais coucou|salue de la main|手を振/, 'wave'], [/\bjump|saute|ジャンプ|跳ん/, 'jump'], [/\bspin|turn around|tourne|回って|回転/, 'spin'],
       [/\bdance|danse|踊って|ダンス/, 'dance'], [/\bnod|hoche la t[eê]te|頷いて|うなずいて/, 'nod'], [/shake your head|secoue la t[eê]te|首を振/, 'shake_head'],
       [/\bbow|r[ée]v[ée]rence|incline-toi|お辞儀|おじぎ/, 'bow'], [/\bclap|applaudi|拍手/, 'clap'], [/\bcheer|yay|hourra|バンザイ|万歳/, 'cheer'], [/\bstretch|[ée]tire|伸び/, 'stretch'],
-      [/come here|viens( ici)?|こっち|来て/, 'come_here'], [/go left|[àa] gauche|左/, 'walk_left'], [/go right|[àa] droite|右/, 'walk_right'],
+      [/come here|viens( ici)?|こっち|来て/, 'come_here'], [/come closer|closer|approche|近くに/, 'walk_closer'], [/go back|step back|further away|recule|下がって|奥へ/, 'walk_away'], [/go left|[àa] gauche|左/, 'walk_left'], [/go right|[àa] droite|右/, 'walk_right'],
       [/hands on (your )?hips|mains sur les hanches|腰に手/, 'hips'], [/cross (your )?arms|croise les bras|腕を組/, 'cross_arms'], [/\bpoint|montre du doigt|指差/, 'point'],
       [/take a nap|go to sleep|fais (une )?sieste|dors|寝て|昼寝/, 'nap'], [/\bfaint|[ée]vanoui|気絶/, 'faint'], [/\bfloat|fly|vole|浮いて|飛んで/, 'float_up'], [/\bshiver|tremble|震え/, 'shiver'],
       [/high five|tope l[àa]|ハイタッチ/, 'high_five'], [/\bstomp|tape du pied|足踏み/, 'stomp'], [/\bwiggle|tortille|くねくね/, 'wiggle'], [/look left|regarde [àa] gauche/, 'look_left'], [/look right|regarde [àa] droite/, 'look_right']
@@ -1384,18 +1556,22 @@
       for (var xr = 0; xr < EXT.routine.length; xr++) { var ov = EXT.routine[xr](); if (ov) return ov; }
       var h = hourOf(), sd = daySeed(), wk = SCENE.weather(), plants = ['fern', 'hydrangea', 'sunflower', 'bonsai', 'sapling'].some(function (k) { return S.owned[k]; });
       var hot = WEATHER ? WEATHER.temp >= 29 : SCENE.season() === 'summer' && h > 12 && h < 16;
+      // she only reads books she has (bought for her), and only pours tea from a tea set she owns
+      var books = (S.owned.books || 0) > 0, teaset = !!S.owned.teaset;
+      function read(alt) { return books ? { id: 'read', prop: 'read' } : alt || (sd % 2 ? { id: 'sketch', prop: 'sketch' } : { id: 'gaze', prop: null }); }
+      function tea(id) { return { id: id, prop: teaset ? 'tea' : null }; }
       if (h >= 23 || h < 6.5) return { id: 'sleep', prop: null };
       if (h < 7.5) return { id: 'wake', prop: null };
-      if (h < 8.5) return { id: 'tea', prop: 'tea' };
-      if (h < 11) return { id: 'read', prop: 'read' };
+      if (h < 8.5) return teaset ? tea('tea') : { id: 'gaze', prop: null };
+      if (h < 11) return read();
       if (h < 12) return plants && wk !== 'rain' && wk !== 'storm' ? { id: 'water', prop: 'water' } : { id: 'gaze', prop: null };
-      if (h < 13) return { id: 'lunch', prop: 'tea' };
-      if (h < 14.5) return sd % 2 ? { id: 'nap', prop: null } : { id: hot ? 'fan' : 'read', prop: hot ? 'fan' : 'read' };
-      if (h < 16.5) return { id: sd % 3 ? 'sketch' : 'read', prop: sd % 3 ? 'sketch' : 'read' };
-      if (h < 18) return { id: hot ? 'fan' : 'read', prop: hot ? 'fan' : 'read' };
+      if (h < 13) return tea('lunch');
+      if (h < 14.5) return sd % 2 ? { id: 'nap', prop: null } : hot ? { id: 'fan', prop: 'fan' } : read();
+      if (h < 16.5) return sd % 3 ? { id: 'sketch', prop: 'sketch' } : read({ id: 'gaze', prop: null });
+      if (h < 18) return hot ? { id: 'fan', prop: 'fan' } : read();
       if (h < 19) return { id: 'sunset', prop: null };
-      if (h < 20) return { id: 'dinner', prop: 'tea' };
-      return { id: 'read', prop: 'read' };
+      if (h < 20) return tea('dinner');
+      return read({ id: 'gaze', prop: null });
     }
     function book() {
       if (!S.book || S.book.done) S.book = { title: pickL(BOOKS.filter(function (b) { return !S.book || b !== S.book.title; })), page: 1, pages: 180 + Math.floor(Math.random() * 300), at: Date.now() };
@@ -1417,14 +1593,14 @@
       applyWorld();
       var r = routineNow(), busyNow = UIBUSY_B() || Date.now() - lastPlayerAt < 60000;
       if (r.id !== ROUTINE.id) { ROUTINE = { id: r.id, since: Date.now() }; }
-      if (r.id === 'read') { var b = book(); var mins = (Date.now() - (b.at || Date.now())) / 60000; if (mins > 3) { b.page = Math.min(b.pages, b.page + Math.round(mins / 3)); b.at = Date.now(); if (b.page >= b.pages) { b.done = true; remember('I finished reading ' + b.title + '.', 1); } } }
+      if (r.id === 'read' && (S.owned.books || 0) > 0) { var b = book(); var mins = (Date.now() - (b.at || Date.now())) / 60000; if (mins > 3) { b.page = Math.min(b.pages, b.page + Math.round(mins / 3)); b.at = Date.now(); if (b.page >= b.pages) { b.done = true; remember('I finished reading ' + b.title + '.', 1); } } }
       BODY.activity(busyNow ? null : r.prop);
       if (r.id === 'nap' && !busyNow && BODY.state === 'awake' && Date.now() - lastTouch > 4 * 60000 && chance(0.3)) BODY.perform(['nap']);
     }
     function routineText() {
       var r = routineNow(), b = S.book;
-      return { wake: 'just woke up, stretching', tea: 'having morning tea', read: 'reading' + (b && !b.done ? ' "' + b.title + '" (page ' + b.page + ' of ' + b.pages + ')' : ''), water: 'watering your plants', gaze: 'watching the lake',
-               study: 'studying at your desk with them (focus timer)', sick: 'resting in bed with a cold',
+      return { wake: 'just woke up, stretching', read: 'reading' + (b && !b.done ? ' "' + b.title + '" (page ' + b.page + ' of ' + b.pages + ', one of the books they bought you)' : ''), water: 'watering your plants', gaze: 'watching the lake',
+               study: 'studying with them (focus timer)', tea: 'having morning tea from your tea set', sick: 'resting in bed with a cold',
                lunch: 'having lunch', nap: 'it\'s your nap time', fan: 'fanning yourself, it\'s hot', sketch: 'sketching in your sketchbook', sunset: 'watching the sunset', dinner: 'having dinner and tea', sleep: 'it\'s your sleeping time' }[r.id];
     }
 
@@ -1560,22 +1736,59 @@
     // ---------- save code: all of her, in one piece of text you can keep or move to another phone ----------
     function b64FromBytes(u8) { var s2 = '', i; for (i = 0; i < u8.length; i += 0x8000) s2 += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s2); }
     function bytesFromB64(b) { var bin = atob(b), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
-    function exportCode() {
-      var json = JSON.stringify(S), bytes = new TextEncoder().encode(json);
-      if (typeof CompressionStream === 'undefined') return Promise.resolve('PSH0:' + b64FromBytes(bytes));
+    // ---------- saving: her whole state plus your settings on this device. Never the API key. Files also carry her photos ----------
+    function lsRaw(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+    function settingsNow(full) {
+      var set = {
+        ai: { provider: cfg.provider || 'auto', model: cfg.model || '', visionModel: cfg.visionModel || '' },   // no key, on purpose
+        lang: lsRaw('pusheen.lang'), loc: lsGet('pusheen.loc'), overlay: lsGet('pusheen.overlay'), voice: lsGet('pusheen.voice')
+      };
+      if (full) { set.wall = lsGet('pusheen.wall'); set.album = lsGet('pusheen.album'); set.sound = lsRaw('pusheen.voice.sound'); }
+      return set;
+    }
+    function exportCode(full) {
+      var json = JSON.stringify({ pusheen: 3, at: Date.now(), s: S, set: settingsNow(!!full) });
+      // if a key was ever pasted into the chat by mistake, it doesn't travel with the save
+      if (cfg.key && cfg.key.length > 8) json = json.split(cfg.key).join('[key removed]');
+      json = json.replace(/sk-(or|ant)-[A-Za-z0-9_-]{12,}/g, '[key removed]');
+      var bytes = new TextEncoder().encode(json);
+      if (typeof CompressionStream === 'undefined') return Promise.resolve('PSH3:' + b64FromBytes(bytes));
       return new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()
-        .then(function (ab) { return 'PSH1:' + b64FromBytes(new Uint8Array(ab)); });
+        .then(function (ab) { return 'PSH2:' + b64FromBytes(new Uint8Array(ab)); });
+    }
+    function applySettings(set) {
+      if (!set || typeof set !== 'object') return false;
+      var reload = false;
+      if (set.ai && typeof set.ai === 'object') {
+        var a = set.ai, okP = ['auto', 'claude', 'openrouter', 'anthropic', 'off'].indexOf(a.provider) >= 0;
+        cfg = Object.assign(cfg, { provider: okP ? a.provider : cfg.provider, model: String(a.model || '').slice(0, 120), visionModel: String(a.visionModel || '').slice(0, 120) });
+        lsSet(LS_CFG, cfg); emit('ai');
+      }
+      if (set.loc && typeof set.loc === 'object') lsSet('pusheen.loc', { on: !!set.loc.on });
+      if (set.overlay && typeof set.overlay === 'object') lsSet('pusheen.overlay', { on: !!set.overlay.on, min: +set.overlay.min || 30 });
+      if (set.voice && typeof set.voice === 'object') lsSet('pusheen.voice', set.voice);
+      if (Array.isArray(set.wall)) lsSet('pusheen.wall', set.wall.slice(-8));
+      if (Array.isArray(set.album)) lsSet('pusheen.album', set.album.slice(-12));
+      if (typeof set.sound === 'string' && /^data:audio\//.test(set.sound)) { try { localStorage.setItem('pusheen.voice.sound', set.sound); } catch (e) {} }
+      if ((set.lang === 'ja' || set.lang === 'en') && set.lang !== (typeof LANG !== 'undefined' ? LANG.code : 'en')) { try { localStorage.setItem('pusheen.lang', set.lang); } catch (e) {} reload = true; }
+      try { localStorage.removeItem(LS_BANK); } catch (e) {} bank = { at: 0, lines: {} };
+      return reload;
     }
     function importCode(code) {
       code = String(code || '').replace(/\s+/g, '');
-      var m = /^PSH([01]):(.+)$/.exec(code); if (!m) return Promise.reject(new Error('not a Pusheen save code'));
+      var m = /^PSH([0-3]):(.+)$/.exec(code); if (!m) return Promise.reject(new Error('not a Pusheen save code'));
       var bytes = bytesFromB64(m[2]);
-      var p2 = m[1] === '0' ? Promise.resolve(bytes) : new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer().then(function (ab) { return new Uint8Array(ab); });
+      var plain = m[1] === '0' || m[1] === '3';
+      var p2 = plain ? Promise.resolve(bytes) : new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer().then(function (ab) { return new Uint8Array(ab); });
+      var reload = false, setIn = null;
       return p2.then(function (u8) {
         var obj = JSON.parse(new TextDecoder().decode(u8));
+        if (obj && obj.pusheen === 3 && obj.s) { setIn = obj.set || null; obj = obj.s; }
         if (!obj || typeof obj.op !== 'number' || !Array.isArray(obj.missions)) throw new Error('this code is damaged');
         S = upgrade(obj); S.saved = Date.now(); save(); flush();
-        SCENE.setOwned(S.owned); BODY.setPlaceNow(S.owned.house && S.place === 'house' ? 'house' : 'garden'); BODY.earmuffs(!!S.muted);
+        if (setIn) { reload = applySettings(setIn); emit('imported', setIn); if (locCfg().on) setTimeout(function () { refreshLocation(false); }, 1500); }
+        if (reload) { setTimeout(function () { location.reload(); }, 1800); return 'reload'; }
+        SCENE.setOwned(S.owned); SCENE.setLayout(S.layout || {}); BODY.setPlaceNow(S.owned.house && S.place === 'house' ? 'house' : 'garden'); BODY.earmuffs(!!S.muted);
         ['state', 'missions', 'points', 'mem', 'opinion', 'feel', 'owned', 'muted', 'loc'].forEach(function (e) { emit(e); });
         setTimeout(function () { say(T('…Oh. ‖ I remember you.') + (S.name ? ' ‖ ' + S.name + '.' : ''), 'surprised'); }, 600);
         return true;
@@ -1799,6 +2012,8 @@
     // ---------- reacting to her body ----------
     var lastTouch = Date.now(), lastTouchSay = 0;
     function touchSay(list, face) { var now = Date.now(); if (now - lastTouchSay < 2600 || busy) return; lastTouchSay = now; say(pickL(list), face, null, { cut: true }); }
+    // you moved her things around the garden
+    BODY.on(function (type, d) { if (type === 'arranged' && d && d.layout) { S.layout = d.layout; save(); } });
     BODY.on(function (type, d) {
       var now = Date.now(), tm = temper();
       if (type === 'touch') { var idleFor = now - lastTouch; lastTouch = now; if (idleFor > 6 * 60000) emit('feel'); }
@@ -1842,8 +2057,10 @@
 
     // ---------- talking to herself when nothing's happening ----------
     var nextIdle = Date.now() + 40000, usedIdle = [], lastMuse = 0;
-    function idleGap() { var tm = temper(), k = tm === 'sad' ? 1.7 : tm === 'dismissive' ? 1.4 : tm === 'kind' || tm === 'delighted' ? 0.8 : 1; return (35 + Math.random() * 50) * 1000 * k; }
+    function idleGap() { var tm = temper(), k = tm === 'sad' ? 1.6 : tm === 'dismissive' ? 1.4 : tm === 'kind' || tm === 'delighted' ? 0.85 : 1; return (95 + Math.random() * 150) * 1000 * k; }
+    var QUIET_MOVES = ['look_left', 'look_right', 'look_down', 'tilt_left', 'tilt_right', 'stretch', 'rub_head', 'hands_behind', 'nod'];
     function idleLine() {
+      var fresh = idleFromBank(); if (fresh) return fresh;
       var h = hourOf(), tm = temper(), li = levelIdx(S.op), cand = [];
       var addP = function (arr, w) { (arr || []).forEach(function (x) { for (var i = 0; i < w; i++) cand.push(x); }); };
       addP(IDLE.any, 1); addP(IDLE[h < 11 && h >= 5 ? 'morning' : h < 17 ? 'day' : h < 21 ? 'evening' : 'night'], 2);
@@ -1859,7 +2076,7 @@
         else if (WEATHER.temp >= 28) addP([fill(T("It's {t}° where you are. ‖ Drink water."), { t: WEATHER.temp })], 2);
         else if (WEATHER.temp <= 3) addP([fill(T("It's {t}° where you are. ‖ Wear something warm."), { t: WEATHER.temp })], 2);
       }
-      var om = open(); if (om.length && Date.now() - (S.lastNag || 0) > 2.5 * 3600e3 && chance(0.4)) { S.lastNag = Date.now(); } else om = [];
+      var om = open().filter(function (m) { return (m.bed || m.due) - Date.now() < 2 * 3600e3; }); if (om.length && Date.now() - (S.lastNag || 0) > 3 * 3600e3 && chance(0.3)) { S.lastNag = Date.now(); } else om = [];
       if (om.length) cand.push(fill(T('Have you done the {m} thing yet? ‖ Just asking.'), { m: JA ? om[0].text : om[0].text.toLowerCase() }));
       if (S.name && chance(0.2)) cand.push(fill(T('{name}. ‖ …Just checking you\'re still there.'), { name: S.name }));
       EXT.idle.forEach(function (fn) { try { var x = fn(); if (x && x[0] && x[0].length) addP(x[0], x[1] || 1); } catch (e) { console.error(e); } });
@@ -1869,16 +2086,27 @@
       var line = pickL(cand); usedIdle.push(line); if (usedIdle.length > 16) usedIdle.shift();
       return fill(line, vars());
     }
+    function maybeGiveMission() {
+      var h = hourOf(), om = open(), today = om.filter(function (m) { return herDay(m.bed || m.due) === herDay(); }).length;
+      if (today || om.length >= 3 || h < 8 || h >= 21 || isLate() || Date.now() - (S.lastGiven || 0) < 3 * 3600e3 || Date.now() - lastPlayerAt > 15 * 60000 || !chance(0.35)) return false;
+      S.lastGiven = Date.now(); save();
+      if (brainKind() === 'off') { giveMission(); return true; }
+      respond('On your own initiative, hand them one mission for today that fits their situation, the time and the weather (field "mission"), phrased casually in "say" ("You could … today."), optionally followed by " ‖ " and what the points could buy you. Short.', { silent: true });
+      return true;
+    }
     function idleTick() {
       var now = Date.now();
       if (document.hidden || BODY.state !== 'awake' || busy || UIBUSY_B() || now < nextIdle || !greeted || extMuted()) return;
       if (now - lastPlayerAt < 45000 || now - lastSpoke < 25000) { nextIdle = now + 15000; return; }
       nextIdle = now + idleGap();
       if (maybeOffer()) return;
+      if (maybeGiveMission()) return;
+      // half the time she doesn't say anything: she just does something
+      if (chance(0.45)) { if (chance(0.5) && BODY.wander) BODY.wander(); else BODY.perform([pickL(QUIET_MOVES)]); return; }
       // with your own key, she sometimes thinks up something herself (only while you're actually around)
       var kind = brainKind();
-      if ((kind === 'openrouter' || kind === 'anthropic') && now - lastMuse > 4 * 60000 && now - Math.max(lastPlayerAt, lastTouch) < 10 * 60000 && chance(0.4)) {
-        lastMuse = now; respond('Nobody said anything for a while. Say something on your own, unprompted: a short thought, observation, question or reminder that fits this moment, your mood and the time. Don\'t greet. Keep it short.', { silent: true });
+      if ((kind === 'openrouter' || kind === 'anthropic') && now - lastMuse > 7 * 60000 && now - Math.max(lastPlayerAt, lastTouch) < 10 * 60000 && chance(0.3)) {
+        lastMuse = now; respond('Nobody said anything for a while. You may say something on your own, unprompted — or just do something (moves) with "say": "…". If you speak: a few words, a thought, an observation, or a question that fits this moment, your mood and the time. Not about missions. Don\'t greet.', { silent: true });
         return;
       }
       var l = idleLine(); if (l) say(l, chance(0.3) ? 'down' : null, null, { quiet: true });
@@ -2053,6 +2281,8 @@
     // ---------- the clock keeps running while you're here ----------
     var lastNag = Date.now(), ticks = 0, lastPlaceThink = Date.now();
     setInterval(idleTick, 5000);
+    bankSetup(); setTimeout(function () { bankRefresh(); }, 20000); setInterval(function () { bankRefresh(); }, 3 * 60000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) setTimeout(function () { bankRefresh(); }, 8000); });
     setInterval(function () {
       if (document.hidden) return;
       var now = Date.now();
@@ -2091,13 +2321,14 @@
       studyTopic: studyTopic, studyWeek: studyWeek, studyAnswer: studyAnswer, open: open, complete: complete, placeName: placeName, dayEvents: dayEvents,
       shockFace: shockFace, buzz: buzz, addTimer: addTimer, feed: feed, eventsToday: eventsToday, applyWorld: applyWorld, routineNow: routineNow, offer: offer,
       get lastPlayerAt() { return lastPlayerAt; }, get busy() { return busy; }, uiBusy: function () { return UIBUSY_B(); }, get greeted() { return greeted; },
+      bank: function (list, cat, desc, n) { BANK_CATS[cat] = [desc, n || 2]; if (BANKCAT) bankReg(list, cat); },
       quietIdle: function (ms) { nextIdle = Date.now() + ms; }, goPlace: goPlace, wakeTime: function () { return S.wake; }, buy: buy, shopState: shopState
     };
     return {
       _k: KIT,
       on: function (fn) { listeners.push(fn); },
       start: function () {
-        SCENE.setOwned(S.owned);
+        SCENE.setOwned(S.owned); SCENE.setLayout(S.layout || {});
         if (S.owned.house && S.place === 'house') BODY.setPlaceNow('house');
         window.pusheenMusic = onMusic;
         BODY.earmuffs(!!S.muted);
@@ -2105,10 +2336,13 @@
         setTimeout(function () { refreshLocation(false); syncAlarm(); }, 4000);
         lifeStart();
         return connect().then(function () {
-          SCENE.setOwned(S.owned); if (S.owned.house && S.place === 'house' && BODY.place !== 'house') BODY.setPlaceNow('house'); arrive();
+          SCENE.setOwned(S.owned); SCENE.setLayout(S.layout || {}); if (S.owned.house && S.place === 'house' && BODY.place !== 'house') BODY.setPlaceNow('house'); arrive();
           var an = android(); if (an) setTimeout(function () { try { onMusic(JSON.parse(an.nowPlaying())); } catch (e) {} }, 5000);
         });
       },
+      aiError: function () { var e = lastAIErr || lsGet('pusheen.aierr'); return e && Date.now() - e.at < 24 * 3600e3 ? e : null; },
+      bankInfo: function () { var n = 0; Object.keys(bank.lines || {}).forEach(function (k) { n += (bank.lines[k] || []).length; }); return { n: bank.key === bankKey() ? n : 0, at: bank.at, busy: bankBusy }; },
+      bankRefresh: function () { bankRefresh(true); },
       nowPlaying: function () { return NOW.playing ? { label: NOW.label, app: NOW.app, verdict: NOW.verdict } : null; },
       android: android,
       setMuted: setMuted, get muted() { return !!S.muted; },
@@ -2119,6 +2353,7 @@
       offer: offer, answerOffer: answerOffer, shock: function (k) { return shockFace(k || 'shock', true); }, touchy: touchy,
       interact: interact, screen: function () { return S.screen && S.screen.day === herDay() ? S.screen : null; }, refreshScreen: refreshScreen, fmtMin: fmtMin,
       exportCode: exportCode, importCode: importCode,
+      setLayout: function (m) { S.layout = m || {}; SCENE.setLayout(S.layout); save(); },
       addPlace: addPlace, removePlace: removePlace, places: function () { return S.places || []; }, placeNow: function () { return S.placeNow && placeName(S.placeNow); }, where: whereText,
       diary: function () { return (S.diary || []).slice().reverse(); }, diaryOpen: diaryOpen, writeDiary: writeDiary, senses: function () { return { bat: BAT, phones: PHONES, call: CALL, unread: UNREAD, steps: S.steps, sleep: lastSleep(), cal: S.cal || [], routine: routineNow().id }; },
       events: eventsToday, routine: routineNow, applyWorld: applyWorld, planTexts: planTexts, refreshSenses: function () { syncPlaces(); senseTick(false); },

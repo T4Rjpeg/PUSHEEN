@@ -114,6 +114,18 @@
       Object.keys(src).forEach(function (k) { var v = src[k]; if (v && typeof v === 'object' && !Array.isArray(v) && dst[k] && typeof dst[k] === 'object' && !Array.isArray(dst[k])) merge(dst[k], v); else dst[k] = v; });
     })(ML, JA_SETS.MIND);
     Object.keys(ML.events).forEach(function (k) { if (K.LINES.events) K.LINES.events[k] = ML.events[k]; });
+    // with a brain connected, these get freshly written too (see the line bank in brain.js)
+    if (K.bank) {
+      K.bank(ML.sick.idle, 'sick_idle', 'while she has a small cold, idle remarks', 3); K.bank(ML.sick.tea, 'sick_tea', 'being brought tea while she has a cold', 2);
+      K.bank(ML.cat.arrive, 'cat_arrive', 'a stray cat named {cat} shows up in the garden', 2); K.bank(ML.cat.pet, 'cat_pet', 'when they pet {cat}, the stray cat', 2);
+      K.bank(ML.tanuki, 'tanuki', 'a tanuki wanders into the garden', 2); K.bank(ML.birds, 'birds', 'birds land on the fence', 2);
+      K.bank(ML.plants.watered, 'watered', 'when they water one of her plants', 2); K.bank(ML.plants.thirsty, 'thirsty', 'pointing out the {plant} needs water (they can tap it to water it)', 2);
+      K.bank(ML.focus.reply, 'focus_reply', 'when they talk to her during a study session they started together', 3); K.bank(ML.focus.back, 'focus_back', 'when they come back to the app during a study session', 2);
+      K.bank(ML.focus.caught, 'focus_caught', 'catching them opening {app} during a study session', 2);
+      K.bank(ML.refuse.wriggle, 'wriggle', 'wriggling free when grabbed while she does not want to be', 3); K.bank(ML.refuse.soothe, 'soothe', 'calming down when they gently hold her hand', 2);
+      K.bank(ML.grudge.forgive, 'forgive', 'accepting their apology after she gave them the silent treatment', 2);
+      K.bank(ML.overlay, 'overlay', 'popping up over another app: they have been on {app} for {min} minutes', 3);
+    }
     function sayP(list, v, face, act) { K.say(fill(pickL(list), K.vars(v || {})), face || null, act || null, { cut: true }); }
 
     // ---------- being handled: she says no to the same rough handling, more so when she's fed up ----------
@@ -586,7 +598,7 @@
     function startFocus(min) {
       var s = S(), t = now(); min = K.clampN(Math.round(min || 25), 5, 120);
       s.focus = { at: t, until: t + min * 60000, min: min, strikes: 0, away: 0 }; K.save(); emit('focus');
-      BODY.activity('read'); sayP(ML.focus.start, { min: min }, 'content');
+      BODY.activity((S().owned.books || 0) > 0 ? 'read' : 'sketch'); sayP(ML.focus.start, { min: min }, 'content');
       var a = an(); if (a && a.notifyAt) try { a.notifyAt(min * 60, 'Pusheen', T('Focus done. Break time.')); } catch (e) {}
     }
     function stopFocus(done) {
@@ -619,7 +631,7 @@
     });
     setInterval(function () { var f = S().focus; if (f && visible() && now() >= f.until) stopFocus(true); emit('focusTick'); }, 1000);
     EXT.routine.push(function () {
-      if (focusOn()) return { id: 'study', prop: 'read' };
+      if (focusOn()) return { id: 'study', prop: (S().owned.books || 0) > 0 ? 'read' : 'sketch' };
       if (isSick() && S().owned.house && S().owned.futon) { var h = K.hourOf(); if (h >= 8 && h < 22) return { id: 'sick', prop: null }; }
       return null;
     });
@@ -740,6 +752,9 @@
       var hl = habitLine(); if (hl) queue.push([hl, null]);
       if (isSick() && !queue.length) queue.push([pickL(ML.sick.idle), 'down']);
     });
+
+    // a save was loaded: her photos and the floating head come back with it
+    BRAIN.on(function (type) { if (type === 'imported') { pushWall(); syncOverlay(); emit('wall'); } });
 
     // ---------- taps on the garden: the cat, the mailbox, a plant ----------
     BODY.on(function (type, d) {
