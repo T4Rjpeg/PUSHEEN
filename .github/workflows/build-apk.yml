@@ -73,8 +73,8 @@ jobs:
                   applicationId = "com.t4rjpeg.pusheen"
                   minSdk = 26
                   targetSdk = 34
-                  versionCode = 7
-                  versionName = "1.6"
+                  versionCode = 8
+                  versionName = "1.7"
               }
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
@@ -271,6 +271,19 @@ jobs:
                       public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> cb, FileChooserParams params) {
                           if (fileCallback != null) fileCallback.onReceiveValue(null);
                           fileCallback = cb;
+                          // a save file to load (not a photo): any file, no camera
+                          boolean onlyImages = true;
+                          String[] acc = params.getAcceptTypes();
+                          if (acc != null) for (String a : acc) if (a != null && a.trim().length() > 0 && !a.trim().startsWith("image")) onlyImages = false;
+                          if (!onlyImages) {
+                              cameraUri = null;
+                              Intent any = new Intent(Intent.ACTION_GET_CONTENT);
+                              any.addCategory(Intent.CATEGORY_OPENABLE);
+                              any.setType("*/*");
+                              try { startActivityForResult(Intent.createChooser(any, "Open a Pusheen save"), 42); }
+                              catch (Exception e) { fileCallback.onReceiveValue(null); fileCallback = null; return false; }
+                              return true;
+                          }
                           Intent camera = null;
                           try {
                               File dir = new File(getCacheDir(), "photos");
@@ -333,6 +346,31 @@ jobs:
 
               // ---------- what the page can ask the phone ----------
               private class Bridge {
+                  // a save file into Downloads/Pusheen (no permission needed on Android 10+; older phones get the app's own folder)
+                  @JavascriptInterface public String saveFile(String name, String text) {
+                      try {
+                          String safe = name.replaceAll("[^A-Za-z0-9._-]", "_");
+                          byte[] bytes = text.getBytes("UTF-8");
+                          if (Build.VERSION.SDK_INT >= 29) {
+                              android.content.ContentValues cv = new android.content.ContentValues();
+                              cv.put(MediaStore.MediaColumns.DISPLAY_NAME, safe);
+                              cv.put(MediaStore.MediaColumns.MIME_TYPE, "text/plain");
+                              cv.put(MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/Pusheen");
+                              Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+                              if (uri == null) return "";
+                              java.io.OutputStream os = getContentResolver().openOutputStream(uri);
+                              if (os == null) return "";
+                              try { os.write(bytes); } finally { os.close(); }
+                              return "Download/Pusheen/" + safe;
+                          }
+                          File dir = new File(getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), "Pusheen");
+                          dir.mkdirs();
+                          File f = new File(dir, safe);
+                          java.io.FileOutputStream fos = new java.io.FileOutputStream(f);
+                          try { fos.write(bytes); } finally { fos.close(); }
+                          return f.getAbsolutePath();
+                      } catch (Exception e) { return ""; }
+                  }
                   @JavascriptInterface public boolean hasMusicAccess() { return musicAllowed(); }
                   @JavascriptInterface public void openMusicAccess() {
                       runOnUiThread(() -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
